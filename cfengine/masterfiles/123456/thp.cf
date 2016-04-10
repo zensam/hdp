@@ -1,0 +1,55 @@
+############################
+# /var/cfengine/masterfiles/123456/thp.cf
+############################
+#
+# Disable transparent hugepages (THP)
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "thp" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent thp
+{
+  vars:
+    redhat_6|centos_6::
+      # "thpon"      string => "[always] madvise never";
+      "thpoff"     string => "always madvise [never]";
+      "cfgpath"    string => "/sys/kernel/mm/redhat_transparent_hugepage";
+      "enabledcfg" string => "$(thp.cfgpath)/enabled";
+      "defragcfg"  string => "$(thp.cfgpath)/defrag";
+      "enablestat" string => execresult("$(vc.tailcmd) -n 1 $(thp.enabledcfg)","useshell");
+      "defragstat" string => execresult("$(vc.tailcmd) -n 1 $(thp.defragcfg)","useshell");
+###
+  classes:
+    (macloud|cloudnode).(redhat_6|centos_6)::
+      "ennever"  expression => strcmp("$(thp.enablestat)","$(thp.thpoff)");
+      "defnever" expression => strcmp("$(thp.defragstat)","$(thp.thpoff)");
+###
+  commands:
+    !ennever.(macloud|cloudnode).(redhat_6|centos_6)::
+      "$(paths.echo) never > $(thp.enabledcfg)"
+      contain    => in_shell,
+      classes    => if_repaired("thpen_never"),
+      ifvarclass => fileexists("$(thp.enabledcfg)");
+##
+    !defnever.(macloud|cloudnode).(redhat_6|centos_6)::
+      "$(paths.echo) never > $(thp.defragcfg)"
+      contain    => in_shell,
+      classes    => if_repaired("thpdef_never"),
+      ifvarclass => fileexists("$(thp.defragcfg)");
+###
+   reports:
+       # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+     !ennever.(macloud|cloudnode).(redhat_6|centos_6)::
+       "$(sys.date) $(sys.uqhost) THP is not disabled in $(thp.enabledcfg)";
+     !defnever.(macloud|cloudnode).(redhat_6|centos_6)::
+       "$(sys.date) $(sys.uqhost) THP is not disabled in $(thp.defragcfg)";
+     thpen_never::
+       "$(sys.date) $(sys.uqhost) THP has been disabled in $(thp.enabledcfg) by $(this.bundle) bundle";
+     thpdef_never::
+       "$(sys.date) $(sys.uqhost) THP has been disabled in $(thp.defragcfg) by $(this.bundle) bundle";
+
+}

@@ -1,0 +1,364 @@
+############################
+# /var/cfengine/masterfiles/123456/cfhub.cf
+############################
+#
+# Custom settings, files and folders for CFEngine
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cfhub" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent cfhub
+{
+  vars:
+    policy_server::
+      # CFEngine custom options
+      "cfuser"    string => "cfapache";
+      "cfsbin"    string => "/opt/cfengine/sbin";
+      "cfdist"    string => "/opt/cfengine/dist";
+      "cflog"     string => "/opt/cfengine/log";
+      "crondhub"  string => "$(vc.etc)/cron.d/quickhub";
+      "getbreak"  string => "$(vc.etc)/cron.d/getbreak";
+###
+  methods:
+    linux::
+      "rootmcini" usebundle => mc_ini,
+                    comment => "Configure mc";
+##
+    policy_server::
+      "dirnfile"  usebundle => dirs_files,
+                    comment => "Create needed files and folders";
+##
+    policy_server::
+      "crondhub"  usebundle => crond_hub,
+                    comment => "Configure $(crondhub)";
+##
+    # policy_server::
+      # "cronbreak" usebundle => crond_break,
+                    # comment => "Configure $(getbreak)";
+##
+    policy_server::
+      "httpconf"  usebundle => http_conf,
+                    comment => "Configure httpd.conf";
+##
+    policy_server::
+      "getall" usebundle => get_all,
+                 comment => "Download archives to $(cfhub.cfdist)";
+##
+    # policy_server::
+      # "getsets"   usebundle => get_sets,
+                    # comment => "Cfengine policies initial download and apply";
+
+}
+####
+bundle agent dirs_files
+{
+  vars:
+    policy_server::
+      "execd_schedule" string => "\"Min00\", \"Min02\", \"Min04\", \"Min06\", \"Min08\", \"Min10\", \"Min12\", \"Min14\", \"Min16\", \"Min18\", \"Min20\", \"Min22\", \"Min24\", \"Min26\", \"Min28\", \"Min30\", \"Min32\", \"Min34\", \"Min36\", \"Min38\", \"Min40\", \"Min42\", \"Min44\", \"Min46\", \"Min48\", \"Min50\", \"Min52\", \"Min54\", \"Min56\", \"Min58\"";
+###
+  files:
+    policy_server.cfengine_3_6::
+      "$(sys.masterdir)/def.cf"
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("\"mailto\" string =>", "\"root@$(sys.fqhost)\";"),
+      comment       => "Send mail from all to cfengine server root";
+##
+    # TODO replace_line_end leaves '"root@$(def.domain)"),' from new 'mailto' definition
+    # policy_server.cfengine_3_7::
+      # "$(sys.masterdir)/controls/.*/def.cf"
+      # create        => "false",
+      # edit_defaults => backup_timestamp,
+      # perms         => mog("600", "root", "root"),
+      # edit_line     => replace_line_end("\"mailto\" string =>", "\"root@$(sys.fqhost)\";"),
+      # comment       => "Send mail from all to cfengine server root";
+##
+    policy_server.cfengine_3_6::
+      "$(sys.masterdir)/controls/cf_execd.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("splaytime  =>", "\"1\";"),
+      classes       => if_repaired("splaytime_edited"),
+      comment       => "Reduce default splaytime (4) to 1";
+##
+    policy_server.cfengine_3_6::
+      "$(sys.masterdir)/controls/cf_execd.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      # edit_line     => uncomment_lines_containing("schedule",".*#"),
+      edit_line     => insert_before_if_no_line(".*Default:.*", "      schedule => { $(execd_schedule) };"),
+      classes       => if_repaired("schedule_edited"),
+      comment       => "Set cf_execd schedule";
+##
+    policy_server.cfengine_3_7::
+      "$(sys.masterdir)/controls/.*/cf_execd.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("splaytime  =>", "\"1\";"),
+      classes       => if_repaired("splaytime_edited"),
+      comment       => "Reduce default splaytime (4) to 1";
+##
+    policy_server.cfengine_3_7::
+      "$(sys.masterdir)/controls/.*/cf_execd.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      # edit_line     => uncomment_lines_containing("schedule",".*#"),
+      edit_line     => insert_before_if_no_line(".*Default:.*", "      schedule => { $(execd_schedule) };"),
+      classes       => if_repaired("schedule_edited"),
+      comment       => "Set cf_execd schedule";
+##
+    policy_server.cfengine_3_6::
+      "$(sys.masterdir)/lib/3.6/reports.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("monitoring_include =>", "{ \".*\" };"),
+      comment       => "Activate monitoring";
+##
+    # Do not use 'controls/.*/reports.cf' here, to keep controls/3.5/reports.cf untouched
+    policy_server.cfengine_3_7::
+      "$(sys.masterdir)/controls/3.6/reports.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("monitoring_include =>", "{ \".*\" };"),
+      comment       => "Activate monitoring";
+##
+    policy_server.cfengine_3_7::
+      "$(sys.masterdir)/controls/3.7/reports.cf"
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => mog("600", "root", "root"),
+      edit_line     => replace_line_end("monitoring_include =>", "{ \".*\" };"),
+      comment       => "Activate monitoring";
+##
+    policy_server::
+      "$(cfhub.cfsbin)/."
+      create        => "true",
+      edit_defaults => no_backup,
+      perms         => mog("644", "root", "root"),
+      comment       => "cfengine custom scripts folder";
+##
+    policy_server::
+      "$(cfhub.cfdist)/."
+      create        => "true",
+      edit_defaults => no_backup,
+      perms         => mog("644", "$(cfhub.cfuser)", "$(cfhub.cfuser)"),
+      # depth_search  => recurse("1"),
+      depth_search  => recurse("inf"),
+      comment       => "cfengine custom archives folder";
+##
+    policy_server::
+      "$(cfhub.cflog)/."
+      create        => "true",
+      edit_defaults => no_backup,
+      perms         => mog("644", "$(cfhub.cfuser)", "$(cfhub.cfuser)"),
+      comment       => "cfengine custom logs folder";
+##
+    policy_server::
+      "$(cfhub.cfsbin)/quickhub.sh"
+      comment       => "Let hub be more quick",
+      perms         => mog("755","root","root"),
+      edit_defaults => no_backup,
+      create        => "true",
+      edit_template => "$(vc.cfetcsrc)/quickhub.sh.tmpl",
+      classes       => if_repaired("restart_crond");
+###
+  commands:
+    restart_crond.policy_server.(redhat_6|centos_6)::
+      "$(paths.service) crond reload"
+      # contain => in_shell,
+      classes => if_repaired("crond_reloaded"),
+      comment => "Reload crond at redhat_6 or centos_6";
+##
+    restart_crond.policy_server.(redhat_7|centos_7)::
+      "$(paths.systemctl) reload crond.service"
+      # contain => in_shell,
+      classes => if_repaired("crond_reloaded"),
+      comment => "Reload crond at redhat_7 or centos_7";
+###
+  reports:
+       # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    crond_reloaded::
+       "$(sys.date) $(sys.uqhost) Service crond has been reloaded";
+    schedule_uncommented::
+       "$(sys.date) $(sys.uqhost) option \"schedule\" has been uncommented in $(sys.masterdir)/controls/cf_execd.cf by $(this.bundle)";
+    schedule_edited::
+       "$(sys.date) $(sys.uqhost) option \"schedule\" has been modified in $(sys.masterdir)/controls/cf_execd.cf by $(this.bundle)";
+    execd_edited::
+       "$(sys.date) $(sys.uqhost) file $(sys.masterdir)/controls/cf_execd.cf has been modified by $(this.bundle)";
+}
+####
+bundle agent mc_ini
+{
+  vars:
+      "mcini"                       string => "/root/.mc/ini";
+      # Midnight commander options to set
+      "mcops[navigate_with_arrows]" string => "1";
+      "mcops[safe_delete]"          string => "1";
+      "mcops[drop_menus]"           string => "1";
+#       "mcops[base_color]"           string => "linux:normal=green,black:marked=yellow,black:input=,\
+# green:menu=black:menusel=white:menuhot=red,:menuhotsel=black,red:dfocus=white,black:dhotnormal=white,\
+# black:dhotfocus=white,black:executable=,black:directory=white,black:link=white,black:device=white,\
+# black:special=white,black:core=,black:stalelink=red,black:editnormal=green,black";
+###
+  files:
+      "$(mcini)"
+        handle        => "edit_mcini",
+        create        => "false",
+        edit_defaults => no_backup,
+        ifvarclass    => fileexists("$(mcini)"),
+        edit_line     => set_variable_values("mc_ini.mcops");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+}
+####
+bundle agent crond_hub
+{
+  files:
+    policy_server::
+      "$(cfhub.crondhub)"
+        create        => "true",
+        edit_defaults => empty,
+        ifvarclass    => fileexists("$(cfhub.cfsbin)/quickhub.sh"),
+        edit_line     => append_if_no_line("* * * * * root /bin/bash $(cfhub.cfsbin)/quickhub.sh");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+}
+####
+bundle agent crond_break
+{
+  files:
+    policy_server::
+      "$(cfhub.getbreak)"
+        create        => "true",
+        edit_defaults => empty,
+        ifvarclass    => fileexists("$(cfhub.cfsbin)/getbreak.sh"),
+        edit_line     => append_if_no_line("*/30 * * * * root /bin/bash $(cfhub.cfsbin)/getbreak.sh");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+}
+####
+bundle agent http_conf
+{
+  vars:
+       "httpdconf" string => "$(sys.workdir)/httpd/conf/httpd.conf";
+       # tags Options,AllowOverride,Allow,Order,</Directory> is preceded with TAB and SPACE to avoid matching in the file
+       "httpopt"   string => "$(const.endl)# CFEngine web published folder$(const.n)\
+Alias /dist $(cfhub.cfdist)$(const.n)<Directory $(cfhub.cfdist)>$(const.n)$(const.t) Options +Indexes$(const.n)\
+$(const.t) AllowOverride All$(const.n)$(const.t) Allow From All$(const.n)$(const.t) Order Deny,Allow$(const.n)
+$(const.t) </Directory>$(const.n)";
+###
+  files:
+      "$(httpdconf)"
+        create        => "false",
+        edit_defaults => no_backup,
+        edit_line     => append_if_no_line("$(httpopt)"),
+        classes       => if_repaired("reload_httpd");
+###
+  commands:
+    reload_httpd.(redhat_6|centos_6)::
+      "$(paths.service) cfengine3 reload"
+      # contain => in_shell,
+      classes => if_repaired("cfengine3_reloaded"),
+      comment => "Reload cfengine3 at redhat_6 or centos_6";
+##
+    reload_httpd.(redhat_7|centos_7)::
+      # "$(paths.systemctl) reload cfengine3-web" # seems to work in cfengine 3.7.0 at centos_7
+      "$(paths.systemctl) restart cfengine3"
+      # contain => in_shell,
+      classes => if_repaired("cfengine3_reloaded"),
+      comment => "Reload cfengine3 at redhat_6 or centos_6";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    cfengine3_reloaded::
+      "$(sys.date) $(sys.uqhost) Service cfengine3 has been reloaded";
+
+}
+####
+bundle agent get_all
+{
+  vars:
+    "acclic"    string => "Cookie: oraclelicense=accept-securebackup-cookie";
+    "jdkurl"    string => "http://download.oracle.com/otn-pub/java/jdk/8u66-b17/$(vc.jdkarch).rpm";
+    "polurl"    string => "http://download.oracle.com/otn-pub/java/jce/8/$(vc.polzip)";
+    # "jdkurl"  string => "http://download.oracle.com/otn-pub/java/jdk/7u79-b15/$(vc.jdkarch).rpm";
+    # "polurl"  string => "http://download.oracle.com/otn-pub/java/jce/7/$(vc.polzip)";
+    "phantarch" string => "phantomjs-1.9.8-linux-x86_64.tar.bz2";
+    "phanturl"  string => "https://s3.eu-central-1.amazonaws.com/<my-company-resource>/$(phantarch)";
+###
+  commands:
+      "$(paths.wget) --no-check-certificate --tries=2 -q -c -P $(cfhub.cfdist) $(phanturl)"
+      contain    => in_shell,
+      ifvarclass => not(fileexists("$(cfhub.cfdist)/$(phantarch)")),
+      classes    => if_repaired("phantarch_downloaded"),
+      comment    => "Download $(phantarch) from aws";
+##
+      "$(paths.wget) -q -O $(cfhub.cfdist)/$(vc.jdkarch).rpm --no-check-certificate -c --header \"$(acclic)\" $(jdkurl)"
+      contain    => in_shell,
+      ifvarclass => not(fileexists("$(cfhub.cfdist)/$(vc.jdkarch).rpm")),
+      classes    => if_repaired("jdkrpm_downloaded"),
+      comment    => "Download $(vc.jdkarch).rpm from oracle";
+##
+      "$(paths.wget) -q -O $(cfhub.cfdist)/$(vc.polzip) --no-check-certificate --header \"$(acclic)\" $(polurl)"
+      contain    => in_shell,
+      classes    => if_repaired("policy_wgeted"),
+      ifvarclass => not(fileexists("$(cfhub.cfdist)/$(vc.polzip)")),
+      classes    => if_repaired("jcepol_downloaded"),
+      comment    => "Download Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files from oracle";
+###
+  files:
+    # phantarch_downloaded::
+      "$(cfhub.cfdist)/$(phantarch)"
+      create        => "false",
+      perms         => mog("644","$(cfhub.cfuser)","$(cfhub.cfuser)"),
+      edit_defaults => no_backup,
+      comment       => "Chown and chmod $(cfhub.cfdist)/$(phanarch)";
+##
+    # jdkrpm_downloaded::
+      "$(cfhub.cfdist)/$(vc.jdkarch).rpm"
+      create        => "false",
+      perms         => mog("644","$(cfhub.cfuser)","$(cfhub.cfuser)"),
+      edit_defaults => no_backup,
+      comment       => "Chown and chmod $(cfhub.cfdist)/$(vc.jdkarch).rpm";
+##
+    # jcepol_downloaded::
+      "$(cfhub.cfdist)/$(vc.polzip)"
+      create        => "false",
+      perms         => mog("644","$(cfhub.cfuser)","$(cfhub.cfuser)"),
+      edit_defaults => no_backup,
+      comment       => "Chown and chmod $(cfhub.cfdist)/$(vc.polzip)";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    phantarch_downloaded::
+       "$(sys.date) $(sys.uqhost) $(phantarch) is downloaded to $(cfhub.cfdist) by $(this.bundle) bundle";
+    jdkrpm_downloaded::
+       "$(sys.date) $(sys.uqhost) $(vc.jdkarch).rpm is downloaded to $(cfhub.cfdist) by $(this.bundle) bundle";
+    jcepol_downloaded::
+       "$(sys.date) $(sys.uqhost) $(vc.polzip) is downloaded to $(cfhub.cfdist) by $(this.bundle) bundle";
+}
+#         edit_defaults => backup_timestamp,
+#         edit_line     => set_variable_values("confiles.sysctlops"),
+#         edit_line     => set_config_values("confiles.sshdops"),
+#         edit_line     => set_colon_field("id","2","3");
+#         edit_line     => append_if_no_line($(ssh_auth_sock));
+#         copy_from     => local_cp("$(confiles.cfetcdir)/wheel.conf");
+#         copy_from     => local_dcp("$(confiles.cfetcdir)/wheel.conf");
+#         edit_line     => comment_lines_matching("^\s*Defaults\s*requiretty.*","#-Commented by $(this.bundle)-#");
+#         copy_from     => secure_cp("$(vc.cfshare)/hosts", "$(sys.policy_hub)"),
+#         edit_line     => comment_lines_matching("@(inet6ops)","#");
+#         edit_line     => append_if_no_line("THIS IS A FLAG FILE FOR NFS CLIENTS"),

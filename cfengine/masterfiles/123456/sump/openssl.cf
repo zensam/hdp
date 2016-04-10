@@ -1,0 +1,45 @@
+#############################################
+# /var/cfengine/masterfiles/123456/openssl.cf
+#############################################
+#
+# OpenSSL upgrade
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "openssl" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent openssl
+{
+  # packages:
+    # redhat_6|centos_6::
+      # "openssl"
+      # # package_policy => "add",
+      # package_policy  => "addupdate",
+      # package_method  => yum,
+      # package_select  => ">=",
+      # package_version => "1.0.1e-42.el6";
+      # package_architectures => { "x86_64" },
+      # ifvarclass => filesexist("@(cfrepos.repos)");
+      # classes => if_else(openssl_is_updated_or_kept,openssl_is_not_ok);
+###
+  methods:
+    redhat_6|centos_6::
+      "latestssl" usebundle => package_latest("openssl"),
+                    classes => if_repaired("ssl_uped");
+###
+  commands:
+    ssl_uped::
+      "/usr/sbin/ambari-agent restart"
+      ifvarclass => fileexists("/usr/sbin/ambari-agent"),
+      action     => if_elapsed("240"), # TODO don't restart every iteration
+      classes    => if_repaired("ambari_agent_restarted");
+###
+  reports:
+    ssl_uped::
+      "$(sys.date) $(sys.uqhost) latestssl method was invoked by $(this.bundle) bundle";
+    ambari_agent_restarted::
+      "$(sys.date) $(sys.uqhost) ambari-agent was restarted by $(this.bundle) bundle";
+}

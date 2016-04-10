@@ -1,0 +1,66 @@
+############################
+# /var/cfengine/masterfiles/123456/softout.cf
+############################
+#
+# Delete unneeded software
+# Workaround to avoid failure of krb5-worstation installation
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "softout" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent softout
+{
+  vars:
+    redhat|centos::
+      "rmlst"        slist => {
+                                "CentrifyDC",
+                                "CentrifyDC-openssh",
+                                "cyrus-sasl-lib.i686",
+                                "openssl.i686",
+                                "compat-libstdc++-33.i686",
+                                "libcom_err.i686",
+                                "libcurl.i686",
+                                "libgcc.i686",
+                                "libssh2.i686",
+                                "libstdc++.i686",
+                                "libwsman1.i686",
+                                "osmosix-agent",
+                                "openwsman-client.i686",
+                                "openssl.i686",
+                                "openldap.i686",
+                                "krb5-libs.i686",
+                                "libselinux.i686",
+                              };
+###
+  methods:
+    redhat|centos::
+      "rm_soft" usebundle => rmsoft("$(rmlst)");
+###
+  reports:
+    # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+}
+bundle agent rmsoft(rmlst) 
+{
+  classes:
+      "norun" expression => fileexists("$(vc.yum_pid)");
+      "do_rm" expression => returnszero("$(paths.rpm) -q $(rmlst)","noshell");
+###
+  commands:
+    do_rm.!norun::
+      "$(paths.rpm) -e $(rmlst) --nodeps >> $(sys.logdir)/rmsoft.log"
+      # ifvarclass => fileexists("$(sys.logdir)/yumup.log"),
+      contain => in_shell,
+      classes => if_repaired("soft_removed");
+###
+  reports:
+    norun::
+       "$(sys.date) $(sys.uqhost) context \"norun\" was defined by $(this.bundle)";
+    do_rm::
+       "$(sys.date) $(sys.uqhost) context \"do_rm\" was defined for software $(rmlst)";
+    soft_removed::
+       "$(sys.date) $(sys.uqhost) software $(rmlst) was removed by $(this.bundle)";
+}

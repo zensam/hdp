@@ -1,0 +1,186 @@
+############################
+# /var/cfengine/masterfiles/123456/vc.cf
+############################
+#
+# Custom variables and contexts (classes)
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "vc" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent vc
+{
+  vars:
+      # Software versions
+      "jdkarch"     string => "jdk-8u66-linux-x64";
+      "jdkver"      string => "jdk1.8.0_66";
+      # "jdkver"    string => "jdk1.7.0_79";
+      "polzip"      string => "jce_policy-8.zip";
+      # "polzip"    string => "UnlimitedJCEPolicyJDK7.zip";
+      # "javahome"  string => "/usr/java/default";
+      "javahome"    string => "/usr/java/$(vc.jdkver)";
+      "ambariver"   string => "2.2.0.0";
+      "hdpver"      string => "2.3.4.0";
+      "hdputilsver" string => "1.1.0.20";
+      # Files and folders
+      "etc"         string => "/etc";
+      "etcdef"      string => "$(vc.etc)/default";
+      "cfopt"       string => "/opt/cfengine";
+      "cfshare"     string => "$(vc.cfopt)/share";
+      "nfsflag"     string => "$(vc.cfshare)/nfsflag";
+      "clustername" string => "AutoCluster1";
+      "policyhub"   string => ip2host("$(sys.policy_hub)");
+      "cfcustnum"   string => "123456";
+      "cfetcdst"    string => "$(sys.inputdir)/$(vc.cfcustnum)/cfetc";
+      "cfetcsrc"    string => "$(sys.masterdir)/$(vc.cfcustnum)/cfetc";
+      "hostsfile"   string => "$(vc.etc)/hosts";
+      "disturl"     string => "http://$(sys.policy_hub)/dist";
+      "osuserenv"   string => "/usr/local/osmosix/etc/userenv";
+      "breakurl"    string => "https://s3.eu-central-1.amazonaws.com/<my-company-resource>/";
+      "nicname"     string => execresult("$(paths.ip) -o -f inet addr | $(paths.grep) \'$(sys.ipv4)\' | $(paths.awk) \'{print $2}\'", "useshell");
+      "network"     string => execresult("$(paths.netstat) -rn | $(paths.awk) \'{print $1}\' | $(paths.grep) \'$(sys.ipv4_2[$(vc.nicname)])\'", "useshell");
+      "genmask"     string => execresult("$(paths.netstat) -rn | $(paths.grep) \'$(vc.network)\' | $(paths.awk) \'{print $3}\'", "useshell");
+      "netmask"     string => execresult("$(paths.ip) -o -f inet addr | $(paths.grep) \'$(sys.ipv4)\' | $(paths.awk) \'{print $4}\' | $(paths.cut) -d '/' -f 2", "useshell");
+      "gateway"     string => execresult("$(paths.netstat) -rn | $(paths.awk) \'{print $2}\' | $(paths.grep) \'$(sys.ipv4_2[$(vc.nicname)])\'", "useshell");
+      "teecmd"      string => "/usr/bin/tee";
+      "tailcmd"     string => "/usr/bin/tail";
+      "whichcmd"    string => "/usr/bin/which";
+      "jqcmd"       string => "/usr/bin/jq";
+      "yum_pid"     string => "/var/run/yum.pid";
+      "yumclean"    string => "$(paths.yum) clean all";
+
+    !policy_server::
+      "contype"     string => "-H \"X-Requested-By: ambari\"";
+      "adpass"      string => "admin";                              # Ambari admin credentials
+      "uadpass"     string => "-u admin:$(vc.adpass)";
+      "xget"        string => "-X GET";
+      "xput"        string => "-X PUT";
+      "xpost"       string => "-X POST";
+      "xdelete"     string => "-X DELETE";
+      "cmport"      string => "8080";                               # Ambari Manager tcp port
+      # "osapptier"   string => "cliqrAppTierName";
+      # "oscloudman"  string => "ClouderaManager";
+      # "oscloudnod"  string => "HwNodes";
+      "oskerber"    string => "Kerberos";
+      "osnodesips"  string => "CliqrTier_HwNodes_IP";
+      "deptype"     string => execresult("$(paths.grep) deployment_type $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "osad_ldap"   string => execresult("$(paths.grep) ad_ldap $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "osad_ip"     string => execresult("$(paths.grep) ad_ip $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "osad_user"   string => execresult("$(paths.grep) ad_user $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "osad_domain" string => execresult("$(paths.grep) ad_domain $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      # "apptier"     string => execresult("$(paths.grep) $(vc.osapptier) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "apptier"     string => execresult("$(paths.grep) cliqrAppTierName $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.awk) \'{print $2}\' | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "masterip"    string => execresult("$(paths.grep) $(vc.osnodesips) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\" | $(paths.awk) -F\, \'{print $4}\'", "useshell");
+      "node1ip"     string => execresult("$(paths.grep) $(vc.osnodesips) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\" | $(paths.awk) -F\, \'{print $1}\'", "useshell");
+      "node2ip"     string => execresult("$(paths.grep) $(vc.osnodesips) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\" | $(paths.awk) -F\, \'{print $2}\'", "useshell");
+      "node3ip"     string => execresult("$(paths.grep) $(vc.osnodesips) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\" | $(paths.awk) -F\, \'{print $3}\'", "useshell");
+      "node1"       string => ip2host("$(vc.node1ip)");
+      "node2"       string => ip2host("$(vc.node2ip)");
+      "node3"       string => ip2host("$(vc.node3ip)");
+      "master"      string => ip2host("$(vc.masterip)");              # Ambari Server
+      "nodesips"    string => execresult("$(paths.grep) $(vc.osnodesips) $(vc.osuserenv) | $(vc.tailcmd) -n 1 | $(paths.cut) -d \'=\' -f 2 | $(paths.tr) -d \'\"\' | $(paths.tr) -d \"\'\"", "useshell");
+      "nodesipslst"  slist => string_split("$(vc.nodesips)", ",", "99");
+      "nodesipsnum"    int => length("vc.nodesipslst");
+      "dfsdir"      string => "$(mnt.point)/dfs";
+      "nndir"       string => "$(vc.dfsdir)/nn";
+      "snndir"      string => "$(vc.dfsdir)/snn";
+      "snneddir"    string => "$(vc.dfsdir)/snned";
+      "dndir"       string => "$(vc.dfsdir)/dn";
+      "mpnmdir"     string => "$(mnt.point)/yarn/nm";
+      "apiurl"      string => "http://$(vc.master):$(vc.cmport)/api"; # API url
+###
+  classes:
+      "cloudnode"           or => { iprange("$(vc.node1ip)"), iprange("$(vc.node2ip)"), iprange("$(vc.node3ip)")}, persistence => "9999";
+      "macloud"     and => { iprange("$(vc.masterip)"), "!policy_server" }, persistence => "9999";
+      "kdcs"        expression => strcmp("$(vc.apptier)","$(vc.oskerber)"), persistence => "9999";
+      "basedep"     expression => strcmp("$(vc.deptype)","Base"), persistence => "9999";
+      "fulldep"     expression => strcmp("$(vc.deptype)","Full"), persistence => "9999";
+      "noded"       expression => fileexists("/var/lib/cloudera-scm-agent/uuid"), persistence => "999";
+      "zoonode"            and => { classmatch("cloudnode"), "noded" }, persistence => "9999"; # nodes with zookeeper-server role
+      "zkeeped"     expression => fileexists("/var/lib/zookeeper/myid"), persistence => "9999"; # zookeeper installed
+      # "osmosix"      expression => islink("/usr/local/osmosix/agent"), persistence => "22"; # osmosix-agent removed
+      # "osmosix"      expression => fileexists("/usr/local/osmosix/agent"), persistence => "22"; # osmosix-agent removed
+      "hdfsed"             and => { userexists("hdfs"), groupexists("hdfs") }, persistence => "999";
+      # "jobtracker"  expression => iprange("$(vc.node3ip)"), persistence => "999";
+      "namenode"    expression => iprange("$(vc.node1ip)"), persistence => "9999";
+      "secondnnode" expression => iprange("$(vc.node2ip)"), persistence => "9999";
+      "datanode"            or => { iprange("$(vc.node1ip)"), iprange("$(vc.node2ip)"), iprange("$(vc.node3ip)"), iprange("$(vc.masterip)") }, persistence => "9999";
+      "pgserver"    expression => classmatch("macloud"), persistence => "9999"; # Postgresql server for hive,oozie, etc, pg.cf to run at.
+      "6up"                 or => { "redhat_6_5", "centos_6_5", "redhat_6_6", "centos_6_6", "redhat_6_7", "centos_6_7" }, persistence => "999";
+      "7up"                 or => { "redhat_7_1", "centos_7_1" }, persistence => "999";
+      "osup"                or => { "6up", "7up" }, persistence => "999";
+      "reposok"     expression => filesexist("@(cfrepos.repos)"), persistence => "9999";
+      "allnodes"            or => { "macloud", "cloudnode", "kdcs", "ldaps", "policy_server" }, persistence => "999999";
+###
+  # Create folders for files exchange
+  files:
+    linux.!policy_server::
+      "$(vc.cfopt)/."
+      perms   => mog("777", "root", "root"),
+      create  => "true",
+      classes => if_repaired("cfopt_created");
+##
+    linux.!policy_server::
+      "$(vc.cfshare)/."
+      perms   => mog("777", "root", "root"),
+      create  => "true",
+      classes => if_repaired("cfshare_created");
+##
+    policy_server::
+      "$(vc.cfshare)/."
+      perms   => mog("777", "cfapache", "cfapache"),
+      create  => "true";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    cloudnode::
+      "$(sys.date) $(sys.uqhost) custom context \"cloudnode\" is defined by $(this.bundle) bundle";
+    macloud::
+      "$(sys.date) $(sys.uqhost) custom context \"macloud\" is defined by $(this.bundle) bundle";
+    allnodes::
+      "$(sys.date) $(sys.uqhost) custom context \"allnodes\" is defined by $(this.bundle) bundle";
+    kdcs::
+      "$(sys.date) $(sys.uqhost) custom context \"kdcs\" is defined by $(this.bundle) bundle";
+    basedep::
+      "$(sys.date) $(sys.uqhost) custom context \"basedep\" is defined by $(this.bundle) bundle";
+    fulldep::
+      "$(sys.date) $(sys.uqhost) custom context \"fulldep\" is defined by $(this.bundle) bundle";
+    ldaps::
+      "$(sys.date) $(sys.uqhost) custom context \"ldaps\" is defined by $(this.bundle) bundle";
+    osup::
+      "$(sys.date) $(sys.uqhost) custom context \"osup\" is defined by $(this.bundle) bundle";
+    6up::
+      "$(sys.date) $(sys.uqhost) custom context \"6up\" is defined by $(this.bundle) bundle";
+    7up::
+      "$(sys.date) $(sys.uqhost) custom context \"7up\" is defined by $(this.bundle) bundle";
+    hdfsed::
+      "$(sys.date) $(sys.uqhost) custom context \"hdfsed\" is defined by $(this.bundle) bundle";
+    noded::
+      "$(sys.date) $(sys.uqhost) custom context \"noded\" is defined by $(this.bundle) bundle";
+    zoonode::
+      "$(sys.date) $(sys.uqhost) custom context \"zoonode\" is defined by $(this.bundle) bundle";
+    zkeeped::
+      "$(sys.date) $(sys.uqhost) custom context \"zkeeped\" is defined by $(this.bundle) bundle";
+    nosmos::
+      "$(sys.date) $(sys.uqhost) custom context \"nosmos\" is defined by $(this.bundle) bundle";
+    jobtracker::
+      "$(sys.date) $(sys.uqhost) custom context \"jobtracker\" is defined by $(this.bundle) bundle";
+    namenode::
+      "$(sys.date) $(sys.uqhost) custom context \"namenode\" is defined by $(this.bundle) bundle";
+    secondnnode::
+      "$(sys.date) $(sys.uqhost) custom context \"secondnnode\" is defined by $(this.bundle) bundle";
+    zkeeped::
+      "$(sys.date) $(sys.uqhost) custom context \"zkeeped\" is defined by $(this.bundle) bundle";
+    datanode::
+      "$(sys.date) $(sys.uqhost) custom context \"datanode\" is defined by $(this.bundle) bundle";
+    pgserver::
+      "$(sys.date) $(sys.uqhost) custom context \"pgserver\" is defined by $(this.bundle) bundle";
+    cfopt_created::
+      "$(sys.date) $(sys.uqhost) folder $(vc.cfopt) has been created by $(this.bundle) bundle";
+    cfshare_created::
+      "$(sys.date) $(sys.uqhost) folder $(vc.cfshare) has been created by $(this.bundle) bundle";
+
+}

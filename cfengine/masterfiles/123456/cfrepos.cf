@@ -1,0 +1,141 @@
+############################
+# /var/cfengine/masterfiles/123456/cfrepos.cf
+############################
+#
+# External and local yum repositories configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cfrepos" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent cfrepos
+{
+  vars:
+      # CentOS 6.X Repository configs directoty
+      "repodir"  string => "$(vc.etc)/yum.repos.d";
+      # Files to edit
+      # Do not modify the ambari.repo file name. This file is expected to be available on the Ambari Server host during Agent registration. 
+      "repo"     string => "$(cfrepos.repodir)/ambari.repo";
+      "epelrepo" string => "$(cfrepos.repodir)/epel.repo";
+      "repos"     slist => { "$(cfrepos.repo)", "$(cfrepos.epelrepo)" };
+      # Files(repositories) to delete
+      "rmrepos"   slist => {"$(cfrepos.repodir)/HDP.repo", "$(cfrepos.repodir)/HDP-UTILS.repo", "$(cfrepos.repodir)/dtv-rh65optional.repo"};
+###
+  classes:
+      "no_repo"        not => fileexists("$(repo)");
+      "dontrun" expression => fileexists("$(vc.yum_pid)");
+###
+  methods:
+    !dontrun::
+      "rm_repo"  usebundle => rmrepo("$(rmrepos)"),
+                   comment => "Remove default repositories";
+##
+    !dontrun.no_repo::
+      "add_repo" usebundle => addrepo,
+                   comment => "Copy template file to $(repo)";
+##
+    # Import Ambari and hortonworks repositories keys (optional) # TODO only one command for import needed, not every policy circle
+    # !dontrun.(redhat|centos)::
+      # "ambvari_key" usebundle => import_ambari_key;
+
+    # !dontrun.(redhat|centos)::
+      # "hdp_key"  usebundle => import_hdp_key;
+
+}
+####
+bundle agent rmrepo(repotorm)
+{
+  files:
+    redhat|centos::
+      "$(repotorm)"
+      delete     => tidy,
+      ifvarclass => fileexists("$(repotorm)"),
+      classes    => if_repaired("repotorm_deleted");
+###
+  commands:
+    repotorm_deleted::
+      "$(vc.yumclean)"
+      contain    => in_shell,
+      classes    => if_else("yumcleaned", "yumclean_failed");
+###
+  reports:
+    repotorm_deleted::
+      "$(sys.date) $(sys.uqhost) file $(repotorm) has been deleted by $(this.bundle) bundle";
+    yumcleaned::
+      "$(sys.date) $(sys.uqhost) yum caches has been cleaned by $(this.bundle) bundle";
+    yumclean_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: yum clean has failed after removing by $(this.bundle) bundle";
+}
+####
+bundle agent addrepo
+{
+###
+  vars:
+    redhat_6|centos_6::
+      "osver" string => "centos6";
+    redhat_7|centos_7::
+      "osver" string => "centos7";
+###
+  files:
+    redhat|centos::
+      "$(cfrepos.repo)"
+      comment       => "Add yum repositories to RHEL6/RHEL7 or CentOS6/CentOS7",
+      perms         => mog("644","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      # copy_from     => local_cp("$(vc.cfetcdst)/hortonworks.tmpl.txt"),
+      # edit_template => "$(vc.cfetcdst)/hortonworks.repo.tmpl.txt",
+      edit_template => "$(vc.cfetcdst)/ambari.repo.tmpl.txt",
+      classes       => if_repaired("check_repos");
+###
+  commands:
+    check_repos::
+      "$(vc.yumclean)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "yumcleaned");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    check_repos::
+      "$(sys.date) $(sys.uqhost) File $(cfrepos.repo) has been changed by $(this.bundle)";
+    yumcleaned::
+      "$(sys.date) $(sys.uqhost) yum caches has been cleaned by $(this.bundle)";
+}
+####
+bundle agent import_ambari_key
+{
+  vars:
+    "ambarikeyurl" string => "http://s3.amazonaws.com/dev.hortonworks.com/ambari/$(addrepo.osver)/RPM-GPG-KEY/RPM-GPG-KEY-Jenkins";
+###
+  commands:
+    redhat|centos::
+      "$(paths.rpm) --import $(ambarikeyurl)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "keyon"),
+      comment    => "Import Ambari rpm repository key";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    keyon::
+      "$(sys.date) $(sys.uqhost) Ambari yum repo GPG key for RHELX|CentOSX has been imported by $(this.bundle)";
+}
+####
+bundle agent import_hdp_key
+{
+  vars:
+    "hdpkeyurl" string => "http://public-repo-1.hortonworks.com/HDP/$(addrepo.osver)/2.x/updates/$(vc.hdpver)/RPM-GPG-KEY/RPM-GPG-KEY-Jenkins";
+###
+  commands:
+      "$(paths.rpm) --import $(hdpkeyurl)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "hdpkeyon"),
+      comment    => "Import HDP rpm repository key";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    hdpkeyon::
+      "$(sys.date) $(sys.uqhost) $(hdpkeyurl) has been imported by $(this.bundle)";
+}

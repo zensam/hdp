@@ -1,0 +1,153 @@
+############################
+# /var/cfengine/masterfiles/123456/krb.cf
+############################
+#
+# Kerberos instance configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "krb" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent krb
+{
+  vars:
+    kdcs::
+      "kdc_name" string => "kdc";
+      # temporary unneeded due to "copy_from     => local_cp("$(vc.cfetcdst)/krb5.conf")"
+      "domup"    string => string_upcase("$(def.domain)");
+      # Files to edit
+      "confs[kdcconf]"  string => "/var/kerberos/krb5kdc/kdc.conf";
+      "confs[kadm5acl]" string => "/var/kerberos/krb5kdc/kadm5.acl";
+      "confs[krb5conf]" string => "$(vc.etc)/krb5.conf";
+###
+  methods:
+    kdcs::
+      "krbsoft" usebundle => kdcsoft,
+                   comment => "Install krb5-* packages due to DTV's repositories";
+##
+    kdcs::
+      "krbagent" usebundle => kdcagent,
+                   comment => "Configure kerberos";
+
+}
+####
+bundle agent kdcsoft
+{
+ vars:
+   kdcs::
+      "krbserf1"  string => "$(vc.etc)/sysconfig/kadmin";
+      "krbserf2"  string => "$(vc.etc)/sysconfig/krb5kdc";
+      "krbserfls"  slist => { "$(krbserf1)", "$(krbserf2)" };
+      "pkinitso"  string => "/usr/lib64/krb5/plugins/preauth/pkinit.so";
+      "krburl"    string => "ftp://mirror.switch.ch/pool/4/mirror/scientificlinux/6.6/x86_64/updates/security";
+      "krb5rpm"   string => "krb5-server-1.10.3-37.el6_6.x86_64.rpm";
+      "pkinitrpm" string => "krb5-pkinit-openssl-1.10.3-37.el6_6.x86_64.rpm";
+###
+  classes:
+      "norun"    expression => fileexists("$(vc.yum_pid)");
+      "krb5ok"   expression => filesexist("@(krbserfls)"); # krb5-server is installed
+      "pkinitok" expression => fileexists("$(pkinitso)"); # krb5-pkinit-openssl is installed
+###
+  commands:
+    kdcs.!norun.!krb5ok::
+      "$(paths.yum) -yt localinstall $(sys.workdir)/$(krb5rpm)"
+      # "$(paths.rpm) -Uv $(sys.workdir)/$(krb5rpm)"
+      contain    => in_shell,
+      classes    => if_repaired("krb5insed"),
+      ifvarclass => fileexists("$(sys.workdir)/$(krb5rpm)");
+      # ifvarclass => and(fileexists("$(sys.workdir)/$(krb5rpm)"),not(filesexist("@(krbserfls)")));
+##
+    kdcs.!norun.!pkinitok::
+      "$(paths.yum) -yt localinstall $(sys.workdir)/$(pkinitrpm)"
+      # "$(paths.rpm) -Uv $(sys.workdir)/$(pkinitrpm)"
+      contain    => in_shell,
+      classes    => if_repaired("pkinitinsed"),
+      ifvarclass => fileexists("$(sys.workdir)/$(pkinitrpm)");
+      # ifvarclass => and(fileexists("$(sys.workdir)/$(pkinitrpm)"),not(fileexists("$(pkinitso)")));
+##
+    kdcs::
+      "$(paths.wget) --tries=2 -q -c -O $(sys.workdir)/$(krb5rpm) $(krburl)/$(krb5rpm)"
+      contain    => in_shell,
+      classes    => if_repaired("krb5wgeted"),
+      ifvarclass => not(fileexists("$(sys.workdir)/$(krb5rpm)")),
+      comment    => "Download $(krb5rpm) from $(krburl)";
+##
+    kdcs::
+      "$(paths.wget) --tries=2 -q -c -O $(sys.workdir)/$(pkinitrpm) $(krburl)/$(pkinitrpm)"
+      contain    => in_shell,
+      classes    => if_repaired("pkinitwgeted"),
+      ifvarclass => not(fileexists("$(sys.workdir)/$(pkinitrpm)")),
+      comment    => "Download $(pkinitrpm) from $(krburl)";
+##
+    krb5insed::
+       "$(paths.service) krb5kdc stop && $(paths.service) kadmin stop"
+       # "$(paths.service) krb5kdc restart && $(paths.service) kadmin restart"
+       contain => in_shell;
+###
+   reports:
+       # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+     krb5insed::
+       "$(sys.date) $(sys.uqhost) $(krb5rpm) was installed by $(this.bundle)";
+     pkinitinsed::
+       "$(sys.date) $(sys.uqhost) $(pkinitrpm) was installed by $(this.bundle)";
+     krb5wgeted::
+       "$(sys.date) $(sys.uqhost) $(krb5rpm) has been downloaded to $(sys.workdir) by $(this.bundle)";
+     pkinitwgeted::
+       "$(sys.date) $(sys.uqhost) $(pkinitrpm) has been downloaded to $(sys.workdir) by $(this.bundle)";
+}
+####
+bundle agent kdcagent
+{
+  files:
+        "$(krb.confs[kdcconf])"
+        # handle        => "edit_kdc_conf",
+        comment       => "Make sure kdc.conf contains desired configuration settings",
+        create        => "false",
+        perms         => mog("600","root","root"),
+        edit_defaults => no_backup,
+        copy_from     => local_cp("$(vc.cfetcdst)/kdc.conf"),
+        classes       => if_repaired("kdcconf_edited");
+##
+        "$(krb.confs[kadm5acl])"
+        # handle        => "edit_kadm5acl",
+        comment       => "Make sure kadm5.acl contains desired configuration settings",
+        create        => "false",
+        perms         => mog("600","root","root"),
+        edit_defaults => no_backup,
+        copy_from     => local_cp("$(vc.cfetcdst)/kadm5.acl.txt"),
+        classes       => if_repaired("kadm5acl_edited");
+##
+        "$(krb.confs[krb5conf])"
+        # handle        => "edit_krb5_conf",
+        comment       => "Make sure krb5.conf contains desired configuration settings",
+        create        => "false",
+        perms         => mog("644","root","root"),
+        edit_defaults => no_backup,
+        copy_from     => local_cp("$(vc.cfetcdst)/krb5.conf"),
+        # edit_template => "$(vc.cfetcdst)/krb5.conf",
+        classes       => if_repaired("krb5conf_edited");
+###
+  commands:
+    kdcconf_edited|kadm5acl_edited|krb5conf_edited::
+    # krb5conf_edited::
+       "$(paths.service) krb5kdc stop && $(paths.service) kadmin stop"
+       # "$(paths.service) krb5kdc restart && $(paths.service) kadmin restart"
+       contain => in_shell,
+       comment => "Stop krb services for run-services.sh";
+       # comment => "Apply new kerberos settings";
+###
+  reports:
+       # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    kdcconf_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[kdcconf]) has been edited";
+       # "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+    kdcconf_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[kadm5acl]) has been edited";
+       # "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+    kdcconf_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[krb5conf]) has been edited, domup variable is - $(krb.domup)";
+       "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+}

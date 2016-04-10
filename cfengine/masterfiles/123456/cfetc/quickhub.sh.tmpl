@@ -1,0 +1,11 @@
+#!/bin/bash
+export PATH=$PATH:$(sys.bindir):/bin
+for each in $(cf-key -s | awk '/$(sys.ipv4_1[$(sys.interface)])/ {print $2}' | sort -u); do
+    state_file="$(sys.workdir)/state/vagrant_env_collected_$each"
+    if [[ ! -f $state_file ]]; then
+        echo "Found new remote client: '$each', initiating cf-hub collection ..."
+        cf-hub --query rebase --query-host $each &>/dev/null\
+            && touch $state_file
+        # cf-hub --query rebase --query-host $each &> $state_file
+    fi
+done

@@ -1,0 +1,12 @@
+Hortonworks HDP cluster deployment
+
+CFEngine version: 3.6.6
+
+1. Provide (install and configure) next software:
+               yum,rpm,scp,curl,unzip,tar,wget,openssl
+               python v2.6 (For RHEL6.X or CentOS6.X) and python v2.7 (not later than 2.7.8 for RHEL6.X or CentOS6.X)
+2. Set passwordless SSH
+3. Configure ntp, network, selinux, iptables, system settings
+4. Install JDK.
+5. Configure and start Ambari server and agents
+6. Install, configure and deploy a HDP cluster by blueprints

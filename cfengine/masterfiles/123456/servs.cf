@@ -1,0 +1,176 @@
+############################
+# /var/cfengine/masterfiles/123456/servs.cf
+############################
+#
+# Services enable/disable
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "servs" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent servs
+{
+  vars:
+   "seron_all"    slist => {
+                            "cfengine3",
+                            # "haveged",
+                            "ntpd",
+                            "rsyslog",
+                           };
+##
+   "seroff_all"   slist => {
+                            "iptables",
+                            "ip6tables",
+                            "ntpdate",
+                           };
+##
+   "seron_master" slist => {
+                            "jexec",
+                            "netfs",
+                            "nfs",
+                            "nfslock",
+                            "rpcbind",
+                            "rpcidmapd",
+                            # "supervisord"
+                            };
+##
+   "seroff_master" slist => {
+                              "supervisord",
+                            };
+##
+   "seron_node"   slist => {
+                            "jexec",
+                            "netfs",
+                            "nfslock",
+                            "rpcbind",
+                            "rpcidmapd"
+                           };
+##
+    "seroff_node" slist => {
+                            "saslauthd",
+                            "supervisord",
+                           };
+##
+#    "seron_kdc"  slist => {
+#                           "krb5kdc",
+#                           "kadmin",
+#                           };
+##
+#    "seroff_kdc" slist => {
+#                           # "nginx",
+#                           # "supervisord",
+#                           };
+##
+    "seron_hub"   slist => {
+                            "netfs",
+                            "nfs",
+                            "nfslock",
+                            "rpcbind"
+                           };
+##
+    "seroff_hub"  slist => {
+                            "jexec",
+                            "postfix",
+                            "saslauthd",
+                            "supervisord",
+                           };
+##
+###
+  services:
+    allnodes::
+      "$(seron_all)"
+      handle         => "enable_services_allnodes",
+      comment        => "Services 2 ON at allnodes",
+      classes        => if_repaired("service_allnodes_enabled"),
+      service_policy => "start";
+    allnodes::
+      "$(seroff_all)"
+      handle         => "disable_services_allnodes",
+      comment        => "Services 2 OFF at allnodes",
+      classes        => if_repaired("service_allnodes_disabled"),
+      service_policy => "disable";
+##
+    macloud::
+      "$(seron_master)"
+      handle         => "enable_services_macloud",
+      comment        => "Services 2 ON at masters(cloudera)",
+      classes        => if_repaired("service_master_enabled"),
+      service_policy => "start";
+    macloud::
+      "$(seroff_master)"
+      handle         => "disable_services_macloud",
+      comment        => "Services 2 OFF at masters(cloudera)",
+      classes        => if_repaired("service_master_disabled"),
+      service_policy => "disable";
+##
+    cloudnode::
+      "$(seron_node)"
+      handle         => "enable_services_nodes",
+      comment        => "Services 2 ON at nodes",
+      classes        => if_repaired("service_node_enabled"),
+      service_policy => "start";
+    cloudnode::
+      "$(seroff_node)"
+      handle         => "disable_services_nodes",
+      comment        => "Services 2 OFF at nodes",
+      classes        => if_repaired("service_node_disabled"),
+      service_policy => "disable";
+##
+   # kdcs::
+      # "$(seron_kdc)"
+      # handle         => "enable_services_kdcs",
+      # comment        => "Services 2 ON at kerberos servers",
+      # classes        => if_repaired("service_kdc_enabled"),
+      # service_policy => "start";
+    # kdcs::
+      # "$(seroff_kdc)"
+      # handle         => "disable_services_kdcs",
+      # comment        => "Services 2 OFF at kerberos servers",
+      # classes        => if_repaired("service_kdc_disabled"),
+      # service_policy => "disable";
+##
+    policy_server::
+      "$(seron_hub)"
+      handle         => "enable_services_hub",
+      comment        => "Services 2 ON at policy server",
+      classes        => if_repaired("service_hub_enabled"),
+      service_policy => "start";
+    policy_server::
+      "$(seroff_hub)"
+      handle         => "disable_services_hub",
+      comment        => "Services 2 OFF at policy server",
+      classes        => if_repaired("service_hub_disabled"),
+      service_policy => "disable";
+##
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    service_allnodes_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_all) is disabled by $(this.bundle)";
+    service_allnodes_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_all) is enabled by $(this.bundle)";
+    service_master_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_master) is disabled by $(this.bundle)";
+    service_master_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_master) is enabled by $(this.bundle)";
+    service_node_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_node) is disabled by $(this.bundle)";
+    service_node_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_node) is enabled by $(this.bundle)";
+    service_kdc_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_kdc) is disabled by $(this.bundle)";
+    service_kdc_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_kdc) is enabled by $(this.bundle)";
+    service_ldap_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_ldap) is disabled by $(this.bundle)";
+    service_ldap_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_ldap) is enabled by $(this.bundle)";
+    service_hub_disabled::
+      "$(sys.date) $(sys.uqhost) Service $(seroff_hub) is disabled by $(this.bundle)";
+    service_hub_enabled::
+      "$(sys.date) $(sys.uqhost) Service $(seron_hub) is enabled by $(this.bundle)";
+
+}

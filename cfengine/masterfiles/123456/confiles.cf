@@ -1,0 +1,464 @@
+############################
+# /var/cfengine/masterfiles/123456/confiles.cf
+############################
+#
+# sysctl, sshd_config, sudoers, etc
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "confiles" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent confiles
+{
+  vars:
+      # Configuration files master location
+      "cfetcdir" string => "$(vc.cfetcdst)";
+      # Files to edit
+      "files[sysctlconf]" string => "$(vc.etc)/sysctl.conf";
+      "files[sshdconfig]" string => "$(vc.etc)/ssh/sshd_config";
+      "files[inittab]"    string => "$(vc.etc)/inittab";
+      "files[logindefs]"  string => "$(vc.etc)/login.defs";
+      "files[sudoers]"    string => "$(vc.etc)/sudoers";
+      "files[wheel]"      string => "$(vc.etc)/sudoers.d/wheel";
+      "files[supervisor]" string => "$(vc.etc)/supervisord.conf";
+      # "files[ambaricfg]"  string => "$(vc.etc)/ambari-agent/conf/ambari-agent.ini";
+      "files[hosts]"      string => "$(vc.etc)/hosts";
+      "files[network]"    string => "$(vc.etc)/sysconfig/network";
+      "files[netconfig]"  string => "$(vc.etc)/netconfig";
+      # umask option to set
+      "loginops[UMASK]"   string => "022";
+      # Network options to set
+      "netops[HOSTNAME]"  string => "$(sys.fqhost)";
+      # Sysctl variables to set
+      "sysctlops[vm.swappiness]"                      string => "0";
+      "sysctlops[net.ipv4.ip_forward]"                string => "1";
+      "sysctlops[net.ipv6.conf.all.disable_ipv6]"     string => "1";
+      "sysctlops[net.ipv6.conf.default.disable_ipv6]" string => "1";
+      # SSHD configuration to set
+      "sshdops[Protocol]"               string => "2";
+      "sshdops[X11Forwarding]"          string => "yes";
+      "sshdops[X11DisplayOffset]"       string => "10";
+      "sshdops[AddressFamily]"          string => "inet";
+      "sshdops[PermitEmptyPasswords]"   string => "no";
+      "sshdops[PermitRootLogin]"        string => "yes";
+      "sshdops[PasswordAuthentication]" string => "yes";
+      "sshdops[UseDNS]"                 string => "no";
+      # # ambari-agent options to set
+      # # "ambariops[server_host]" string => "$(vc.master)";
+###
+  methods:
+      "sysctl"    usebundle => edit_sysctl,
+                    comment => "Configure $(files[sysctlconf])";
+      "sshd"      usebundle => edit_sshd,
+      ifvarclass => fileexists("$(files[sshdconfig])"),
+                    comment => "Configure $(files[sshdconfig])";
+      "inittab"   usebundle => edit_inittab,
+                    comment => "Configure $(files[inittab])";
+      "logindef"  usebundle => login_defs,
+                    comment => "Configure $(files[logindefs])";
+      "sshsudo"   usebundle => ssh_sudo,
+                    comment => "Append line to $(files[sshsuops])";
+      "wheelsu"   usebundle => wheel_sudoers,
+                    comment => "Copy template file to $(files[wheel])";
+      "disreqtty" usebundle => dis_reqtty,
+                    comment => "Comment line 'Defaults requiretty' in $(files[sudoers])";
+      "etchosts"  usebundle => etc_hosts,
+                    comment => "Edit $(files[hosts])";
+      "network"   usebundle => net_work,
+                 ifvarclass => fileexists("$(files[network])"),
+                    comment => "Set FQDN hostname in $(files[network])";
+      "netconfig" usebundle => net_config,
+                 ifvarclass => fileexists("$(files[netconfig])"),
+                    comment => "Comment lines matching \"inet6\" in $(files[netconfig])";
+      # "nfsserver" usebundle => nfsser,
+                    # comment => "Set nfs shares by $(sys.exports)";
+      # "nfsclient" usebundle => nfscl,
+                    # comment => "Connect to nfs shares by $(sys.fstab)";
+      # "cr_dirs"   usebundle => crdirs,
+                 # ifvarclass => userexists("hdfs"),
+                    # comment => "Create HDFS,YARN Folders";
+      # "ambaricfg" usebundle => ambari_cfg,
+                 # ifvarclass => fileexists("$(files[ambaricfg])"),
+                    # comment => "Edit ambari-agent config";
+##
+}
+####
+bundle agent edit_sysctl
+{
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[sysctlconf])"
+      handle    => "edit_sysctl",
+      comment   => "Make sure sysctl.conf contains desired configuration settings",
+      create    => "true",
+      edit_line => set_variable_values("confiles.sysctlops"),
+      classes   => if_repaired("sysctl_modified");
+###
+  commands:
+    sysctl_modified.!no_restarts::
+      "$(paths.sysctl) -q -e -p"
+      handle  => "reload_sysctl",
+      comment => "Make sure new sysctl settings are loaded";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    sysctl_modified.!no_restarts::
+      "$(sys.date) $(sys.uqhost) Reloading sysctl";
+}
+####
+bundle agent edit_sshd
+{
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[sshdconfig])"
+      handle    => "edit_sshd",
+      comment   => "Set desired sshd_config parameters",
+      edit_line => set_config_values("confiles.sshdops"),
+      classes   => if_repaired("restart_sshd");
+###
+  commands:
+    restart_sshd::
+      "$(paths.service) sshd restart"
+      handle  => "sshd_restart",
+      # contain => in_shell,
+      comment => "Restart sshd if the configuration file was modified";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    restart_sshd::
+      "$(sys.date) $(sys.uqhost) Restarting sshd";
+}
+####
+bundle agent edit_inittab
+{
+  files:
+     redhat_6|centos_6::
+      "$(confiles.files[inittab])"
+      handle        => "inittab_set_initdefault",
+      comment       => "Ensure graphical mode is disabled (default runmode=3)",
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("inittab_edited"),
+      edit_line     => set_colon_field("id","2","3");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    inittab_edited::
+      "$(sys.date) $(sys.uqhost) Changed default runmode to 3 in $(confiles.files[inittab])";
+    !inittab_edited::
+      "$(sys.date) $(sys.uqhost) $(confiles.files[inittab]) has correct default runmode";
+}
+####
+bundle agent login_defs
+{
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[logindefs])"
+      comment   => "Set desired UMASK value",
+      edit_line => set_config_values("confiles.loginops"),
+      classes   => if_repaired("umask_ok");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    umask_ok::
+      "$(sys.date) $(sys.uqhost) UMASK value is set to $(confiles.loginops[UMASK]) in $(confiles.files[logindefs])";
+}
+####
+bundle agent ssh_sudo
+{
+# Add line 'Defaults   env_keep += "SSH_AUTH_SOCK"' to /etc/sudoers
+  vars:
+      "ssh_auth_sock" string => "Defaults    env_keep += \"SSH_AUTH_SOCK\"";
+###
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[sudoers])"
+      comment       => "Allow ssh-agent to work via sudo",
+      perms         => mog("440","root","root"),
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("check_sudoers"),
+      edit_line     => append_if_no_line($(ssh_auth_sock));
+###
+  commands:
+    check_sudoers::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+      handle  => "check_sudoers_after_$(this.promiser)",
+      comment => "Check sudoers file for errors";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    check_sudoers::
+      "$(sys.date) $(sys.uqhost) Added $(ssh_auth_sock) line to $(confiles.files[sudoers]) by $(this.bundle)";
+#    !check_sudoers::
+#      "$(sys.date) $(sys.uqhost) No changes made to $(confiles.files[sudoers]) by $(this.bundle)";
+}
+####
+bundle agent wheel_sudoers
+{
+# Copy the wheel.conf to /etc/sudoers.d/wheel
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[wheel])"
+      comment   => "Allow wheel group to run all commands without password",
+      perms     => mog("440","root","root"),
+      classes   => if_repaired("check_wheel"),
+      # copy_from => secure_cp("$(confiles.cfetcdir)/wheel","$(sys.policy_hub)");
+      copy_from => local_cp("$(confiles.cfetcdir)/wheel.conf");
+###
+  commands:
+    check_wheel::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+      handle  => "check_wheel_after_$(this.promiser)",
+      comment => "Check sudoers for errors after wheel adding";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    check_wheel::
+      "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/wheel.conf has been copied to $(confiles.files[wheel]) by $(this.bundle)";
+#    !check_wheel::
+#      "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/wheel.conf exists as $(confiles.files[wheel])";
+}
+####
+bundle agent dis_reqtty
+{
+  # Comment (Defaults requiretty) in /etc/sudoers
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[sudoers])"
+      comment       => "Enable \"ssh hostname sudo <cmd>\"",
+      perms         => mog("440","root","root"),
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("check_sudoers"),
+      edit_line     => comment_lines_matching("^\s*Defaults\s*requiretty.*","#-Commented by $(this.bundle)-#");
+###
+  commands:
+    check_sudoers::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+      handle  => "sudoers_check_after_$(this.handle)",
+      comment => "Check sudoers file for errors";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+}
+####
+bundle agent etc_hosts
+{
+  files:
+    linux::
+      "$(confiles.files[hosts])"
+      perms         => mog("644","root","root"),
+      edit_defaults => backup_timestamp,
+      edit_line     => replace_line_end("\:\:1", "localhost6 localhost6.localdomain6"),
+      classes       => if_repaired("hosts_edited"),
+      comment       => "Remove localhost from ::1";
+##
+    # linux.!policy_server::
+      # "$(confiles.files[hosts])"
+      # perms     => mog("644","root","root"),
+      # # copy_from => local_cp("$(confiles.cfetcdir)/hosts.txt"),
+      # copy_from => secure_cp("$(vc.cfshare)/hosts", "$(sys.policy_hub)"),
+      # classes   => if_repaired("hosts_edited"),
+      # comment => "Copy template file to $(files[hosts])";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    hosts_edited::
+      "$(sys.date) $(sys.uqhost) file \"/etc/hosts\" has been edited by $(this.bundle)";
+}
+####
+bundle agent net_work
+{
+  files:
+    redhat|centos::
+      "$(confiles.files[network])"
+      perms         => mog("644","root","root"),
+      create        => "true",
+      edit_line     => set_variable_values("confiles.netops"),
+      # edit_template => "$(vc.cfetcdst)/network.txt",
+      classes       => if_repaired("network_edited");
+###
+  # Network service restart rewrites /etc/sysconfig/network in DTV environment
+  # commands:
+    # network_edited.(redhat_6|centos_6)::
+      # "$(paths.service) network restart"
+      # comment => "RHEL6 Restart network if the configuration file was modified";
+##
+    # network_edited.(redhat_7|centos_7)::
+      # "$(paths.systemctl) restart network"
+      # comment => "RHEL7 Restart network if the configuration file was modified";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    network_edited::
+      "$(sys.date) $(sys.uqhost) file $(confiles.files[network]) was edited by $(this.bundle)";
+}
+####
+bundle agent net_config
+{
+  vars:
+    redhat::
+      "inet6ops" slist => { "^udp6.*", "^tcp6.*" };
+###
+  files:
+    redhat_6|centos_6::
+      "$(confiles.files[netconfig])"
+      comment       => "to avoid flood messages in NFS logs",
+      perms         => mog("644","root","root"),
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("netconfig_edited"),
+      edit_line     => comment_lines_matching("@(inet6ops)","#");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    netconfig_edited::
+      "$(sys.date) $(sys.uqhost) file $(confiles.files[netconfig]) is edited by $(this.bundle)";
+}
+####
+bundle agent nfsser
+{
+  vars:
+    namenode::
+      # "mounters" string => "node*.$(def.domain)(rw,no_subtree_check,insecure,no_root_squash)";
+      "mounters" string => "*.$(def.domain)(rw,insecure,no_subtree_check,no_root_squash,sync,nohide)";
+###
+  files:
+    namenode::
+      "$(sys.exports)"
+      comment        => "Set nfs share",
+      perms          => mog("644","root","root"),
+      create         => "false",
+      # edit_defaults  => empty,
+      edit_defaults  => backup_timestamp,
+      edit_line      => append_if_no_line("$(vc.cfshare) $(nfsser.mounters)"),
+      classes        => if_repaired("exports_cfshared");
+###
+    namenode::
+      "$(vc.nfsflag)"
+      comment        => "Create flag file for nfs clients",
+      perms          => mog("444","root","root"),
+      create         => "true",
+      edit_defaults  => no_backup,
+      edit_line      => append_if_no_line("THIS IS A FLAG FILE FOR NFS CLIENTS"),
+      classes        => if_repaired("nfsflag_created");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    exports_cfshared::
+      "$(sys.date) $(sys.uqhost) line $(vc.cfshare) $(nfsser.mounters) is added to $(sys.exports) by $(this.bundle)";
+    nfsflag_created::
+      "$(sys.date) $(sys.uqhost) file $(vc.nfsflag) has been created by $(this.bundle)";
+}
+####
+bundle agent nfscl
+{
+  vars:
+    cloudnode::
+      "mntnfs"    string => "/mnt/nfs";
+      "mntnfscmd" string => "/bin/mount -t nfs $(vc.master):$(vc.cfshare) $(nfscl.mntnfs)";
+###
+  files:
+    cloudnode::
+      "$(nfscl.mntnfs)/."
+      perms   => mog("755", "root", "root"),
+      create  => "true",
+      ifvarclass => not(fileexists("$(nfscl.mntnfs)/nfsflag")),
+      classes => if_repaired("mntnfs_created");
+###
+  commands:
+    cloudnode::
+      "$(nfscl.mntnfscmd)"
+      contain => in_shell,
+      ifvarclass => not(fileexists("$(nfscl.mntnfs)/nfsflag")),
+      classes => cmd_repair(0, "cfshare_mounted"),
+      comment => "Mount nfs share from cfhub";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    mntnfs_created::
+      "$(sys.date) $(sys.uqhost) mount point $(nfscl.mntnfs) is created by $(this.bundle)";
+    cfshare_mounted::
+      "$(sys.date) $(sys.uqhost) remote folder $(confcloud.cloudmaster):$(vc.cfshare) is mounted to $(nfscl.mntnfs) by $(this.bundle)";
+}
+####
+bundle agent crdirs
+{
+  files:
+    macloud|cloudnode::
+      "$(vc.dfsdir)/."
+      perms   => mog("755", "root", "root"),
+      create  => "true",
+      classes => if_repaired("dfs_created");
+##
+    namenode::
+      "$(vc.nndir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      # ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      ifvarclass => groupexists("hdfs"),
+      create     => "true",
+      classes    => if_repaired("nn_created");
+##
+    secondnnode::
+      "$(vc.snndir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      # ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      ifvarclass => groupexists("hdfs"),
+      classes    => if_repaired("snn_created");
+##
+    secondnnode::
+      "$(vc.snneddir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      # ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      ifvarclass => groupexists("hdfs"),
+      classes    => if_repaired("snned_created");
+##
+    datanode::
+      "$(vc.dndir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      # ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      ifvarclass => groupexists("hdfs"),
+      classes    => if_repaired("dn_created");
+###
+  reports:
+       # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    dfs_created::
+       "$(sys.date) $(sys.uqhost) directory $(vc.dfsdir) created by $(this.bundle)";
+    nn_created::
+       "$(sys.date) $(sys.uqhost) directory $(vc.nndir) created by $(this.bundle)";
+    snn_created::
+       "$(sys.date) $(sys.uqhost) directory $(vc.snndir) created by $(this.bundle)";
+    snned_created::
+       "$(sys.date) $(sys.uqhost) directory $(vc.snneddir) created by $(this.bundle)";
+    dn_created::
+       "$(sys.date) $(sys.uqhost) directory $(vc.dndir) created by $(this.bundle)";
+}
+####
+bundle agent ambari_cfg
+{
+  files:
+    cloudnode|macloud::
+      "$(confiles.files[ambaricfg])"
+      perms         => mog("755","root","root"),
+      create        => "false",
+      edit_template => "$(vc.cfetcdst)/ambari-agent.ini.txt",
+      classes       => if_repaired("ambaricfg_edited");
+###
+  commands:
+    ambaricfg_edited::
+      "/usr/sbin/ambari-agent start"
+      comment => "Start ambari agent if the configuration file was modified";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    ambaricfg_edited::
+      "$(sys.date) $(sys.uqhost) file $(confiles.files[ambaricfg]) was edited by $(this.bundle)";
+}
+

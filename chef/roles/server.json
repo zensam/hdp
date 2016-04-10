@@ -1,0 +1,12 @@
+{
+  "name": "server",
+  "chef_type": "role",
+  "json_class": "Chef::Role",
+  "description": "The base role for master node",
+  "default_attributes": {
+  },
+  "run_list": [
+    "recipe[hortonworks::server]"
+  ]
+}
+

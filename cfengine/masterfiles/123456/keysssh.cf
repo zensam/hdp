@@ -1,0 +1,86 @@
+############################
+# /var/cfengine/masterfiles/123456/keysssh.cf
+############################
+#
+# ssh keys distribution
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+# body common control
+#{
+#    bundlesequence => { "keysssh" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent keysssh
+{
+  vars:
+      "sshusers" slist => {"root", "centos"};
+###
+  methods:
+      "ssh_users" usebundle => sshus("$(sshusers)");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+      # "sshuserslst - $(sshusers)";
+
+}
+bundle agent sshus(sshuser)
+{
+  vars:
+      "addtokeys"            string => readfile("$(vc.cfetcdst)/id_rsa.pub.txt", "1024");
+      "sshuserhome"          string => execresult("$(paths.grep) ^$(sshuser) $(vc.etc)/passwd | $(paths.awk) -F\":\" \'{print $6}\'", "useshell");
+      "homessh"              string => "$(sshuserhome)/.ssh";
+      "ssh[config]"          string => "$(homessh)/config";
+      "ssh[id_rsa]"          string => "$(homessh)/id_rsa";
+      "ssh[id_rsa_pub]"      string => "$(homessh)/id_rsa.pub";
+      "ssh[authorized_keys]" string => "$(homessh)/authorized_keys";
+
+  files:
+    linux::
+      "$(homessh)/."
+      create  => "true",
+      perms      => mog("700", "$(sshuser)", "$(sshuser)"),
+      ifvarclass => and(not(fileexists("$(homessh)")),userexists("$(sshuser)"));
+
+    linux::
+      "$(ssh[config])"
+      perms      => mog("600","$(sshuser)","$(sshuser)"),
+      # ifvarclass => userexists("$(sshuser)"),
+      ifvarclass => and(not(fileexists("$(ssh[config])")),userexists("$(sshuser)")),
+      copy_from  => local_cp("$(vc.cfetcdst)/config.txt");
+      # classes    => if_repaired("restart_ssh");
+
+    linux::
+      "$(ssh[id_rsa])"
+      perms      => mog("400","$(sshuser)","$(sshuser)"),
+      copy_from  => local_cp("$(vc.cfetcdst)/id_rsa.txt"),
+      ifvarclass => and(not(fileexists("$(ssh[id_rsa])")),userexists("$(sshuser)"));
+
+    linux::
+      "$(ssh[id_rsa_pub])"
+      perms      => mog("400","$(sshuser)","$(sshuser)"),
+      copy_from  => local_cp("$(vc.cfetcdst)/id_rsa.pub.txt"),
+      ifvarclass => and(not(fileexists("$(ssh[id_rsa_pub])")),userexists("$(sshuser)"));
+
+    linux::
+      "$(ssh[authorized_keys])"
+      create     => "true",
+      perms      => mog("600","$(sshuser)","$(sshuser)"),
+      ifvarclass => userexists("$(sshuser)"),
+      # ifvarclass => and(not(fileexists("$(ssh[authorized_keys])")),userexists("$(sshuser)")),
+      edit_line  => append_if_no_line("$(addtokeys)");
+
+  commands:
+    restart_ssh.!no_restarts::
+      "$(paths.service) sshd restart"
+      # contain => in_shell,
+      comment => "Restart sshd service";
+
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+      # "ssh[config] - $(ssh[config])";
+      # "ssh[id_rsa] - $(ssh[id_rsa])";
+      # "ssh[id_rsa_pub] - $(ssh[id_rsa_pub])";
+      # "addtokeys - $(addtokeys)";
+
+}

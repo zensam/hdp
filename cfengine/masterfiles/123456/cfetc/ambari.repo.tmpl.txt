@@ -1,0 +1,23 @@
+[Updates-ambari-$(vc.ambariver)]
+name=ambari-$(vc.ambariver) - Updates
+baseurl=http://public-repo-1.hortonworks.com/ambari/$(addrepo.osver)/2.x/updates/$(vc.ambariver)
+gpgcheck=1
+gpgkey=http://public-repo-1.hortonworks.com/ambari/$(addrepo.osver)/RPM-GPG-KEY/RPM-GPG-KEY-Jenkins
+enabled=1
+priority=1
+
+[HDP-$(vc.hdpver)]
+name=HDP Version - HDP-$(vc.hdpver)
+baseurl=http://public-repo-1.hortonworks.com/HDP/$(addrepo.osver)/2.x/updates/$(vc.hdpver)
+gpgcheck=1
+gpgkey=http://public-repo-1.hortonworks.com/HDP/$(addrepo.osver)/2.x/updates/$(vc.hdpver)/RPM-GPG-KEY/RPM-GPG-KEY-Jenkins
+enabled=1
+priority=1
+
+[HDP-UTILS-$(vc.hdputilsver)]
+name=HDP Utils Version - HDP-UTILS-$(vc.hdputilsver)
+baseurl=http://public-repo-1.hortonworks.com/HDP-UTILS-$(vc.hdputilsver)/repos/$(addrepo.osver)
+gpgcheck=1
+gpgkey=http://public-repo-1.hortonworks.com/HDP/$(addrepo.osver)/2.x/updates/$(vc.hdpver)/RPM-GPG-KEY/RPM-GPG-KEY-Jenkins
+enabled=1
+priority=1

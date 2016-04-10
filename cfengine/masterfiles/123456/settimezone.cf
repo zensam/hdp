@@ -1,0 +1,52 @@
+############################
+# /var/cfengine/masterfiles/123456/settimezone.cf
+############################
+#
+# Timezone configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "settimezone" };
+#     inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent settimezone
+{
+  vars:
+      "timezone" string => "$(vc.etc)/sysconfig/clock";
+      # "zone2set[ZONE]" string => "\"Europe/Kiev\"";
+      "zone2set[ZONE]" string => "\"Etc/UTC\"";
+      # "sloctime" string => "/usr/share/zoneinfo/Europe/Kiev";
+      "sloctime" string => "/usr/share/zoneinfo/Etc/UTC";
+      "dloctime" string => "$(vc.etc)/localtime";
+###
+  files:
+    redhat|centos::
+      "$(timezone)"
+      handle        => "set_time_zone",
+      comment       => "set to UTC for production",
+      perms         => mog("644","root","root"),
+      create        => "true",
+      edit_defaults => clear_clock,
+      edit_line     => set_variable_values("settimezone.zone2set"),
+      classes       => if_repaired("time_zoned");
+###
+  commands:
+    (redhat|centos).time_zoned::
+      "/bin/rm -f $(dloctime)";
+      "/bin/cp -f $(sloctime) $(dloctime)";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    time_zoned::
+      "$(sys.date) $(sys.uqhost) Modifiying $(timezone)";
+    !time_zoned::
+      "$(sys.date) $(sys.uqhost) $(timezone) is OK";
+
+}
+####
+body edit_defaults clear_clock
+{
+      empty_file_before_editing => "true";
+}

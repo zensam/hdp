@@ -1,0 +1,74 @@
+body common control
+{
+    bundlesequence => { "test3" };
+    inputs => { "$(sys.libdir)/stdlib.cf" };
+}
+####
+bundle agent test3
+{
+  vars:
+      "selconfig" string =>"/root/2test/config.txt";
+      "timeout"   string => "10";
+      "exectout"  string => "5";
+      "ops[SEL]"  string => "disabled";
+      "ops[SELE]" string => "targeted";
+###
+  files:
+     "$(test3.selconfig)"
+     action        => if_elapsed("3"),
+     create        => "true",
+     edit_defaults => backup_timestamp,
+     edit_line     => set_variable_values("test3.ops"),
+     classes       => if_repaired("selconf_edited");
+###
+  commands:
+    selconf_edited::
+      "/bin/sleep $(test3.timeout)"
+      # contain => in_shell,
+      # this command will fail 'cos fortest3 has exec_timeout less than $test3.timeout
+      contain => fortest3,
+      classes => if_else("command_ok","command_fail");
+
+    command_ok::
+      "/bin/echo \'COMMAND OK\'"
+      contain => in_shell,
+      # contain => fortest3,
+      classes => if_else("command_ok_ok","command_ok_fail");
+
+    command_fail::
+      "/bin/echo \'COMMAND FAIL\'"
+      # contain => fortest3,
+      contain => in_shell,
+      classes => if_else("command_fail_ok","command_fail_fail");
+
+###
+  reports:
+     "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+     selconf_edited::
+     "$(sys.date) $(sys.uqhost) Modifiying $(test3.selconfig)";
+     !selconf_edited::
+     "$(sys.date) $(sys.uqhost) test3 config is in required state";
+     command_ok::
+     "$(sys.date) $(sys.uqhost) context \"command_ok\"  $(this.handle) ";
+     command_fail::
+     "$(sys.date) $(sys.uqhost) context \"command_fail\"  $(this.handle) ";
+     command_ok_ok::
+     "$(sys.date) $(sys.uqhost) context \"command_ok_ok\"  $(this.handle) ";
+     command_ok_fail::
+     "$(sys.date) $(sys.uqhost) context \"command_ok_fail\"  $(this.handle) ";
+     command_fail_ok::
+     "$(sys.date) $(sys.uqhost) context \"command_fail_ok\"  $(this.handle) ";
+     command_fail_fail::
+     "$(sys.date) $(sys.uqhost) context \"command_fail_fail\"  $(this.handle) ";
+}
+body contain fortest3
+{
+    useshell => "useshell";
+    # umask => "0022";
+    exec_owner => "root";
+    exec_group => "root";
+    exec_timeout => "$(test3.exectout)";
+    chdir => "/root/2test";
+    # chroot => "/private/path";
+}
+

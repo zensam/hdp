@@ -1,0 +1,8 @@
+-- create hiva database
+CREATE DATABASE hive;
+CREATE USER hive WITH PASSWORD 'hive';
+GRANT ALL PRIVILEGES ON DATABASE hive TO hive;
+-- create oozie database
+CREATE DATABASE oozie;
+CREATE USER oozie WITH PASSWORD 'oozie';
+GRANT ALL PRIVILEGES ON DATABASE oozie TO oozie;

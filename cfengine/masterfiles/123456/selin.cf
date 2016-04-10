@@ -1,0 +1,36 @@
+############################
+# /var/cfengine/masterfiles/123456/selind.cf
+############################
+#
+# Disable selinux in config file
+#
+# Uncomment 'body common control' bundle to test policy by 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "selin" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent selin
+{
+  vars:
+      "ops[SELINUX]"     string => "disabled";
+      "ops[SELINUXTYPE]" string => "targeted";
+###
+  files:
+     "$(vc.etc)/selinux/config"
+     edit_defaults => no_backup,
+     edit_line     => set_variable_values("selin.ops"),
+     classes       => if_repaired("selconf_edited");
+###
+  commands:
+    selconf_edited::
+      "/usr/sbin/setenforce 0";
+###
+  reports:
+     # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+     selconf_edited::
+     "$(sys.date) $(sys.uqhost) Modifiying $(vc.etc)/selinux/config";
+     !selconf_edited::
+     "$(sys.date) $(sys.uqhost) Selinux config is in required state";
+}

@@ -1,0 +1,162 @@
+############################
+# /var/cfengine/masterfiles/123456/softin.cf
+############################
+#
+# Software set installation
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "softin" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent softin
+{
+  vars:
+      # "yumupcmd"    string => "$(paths.yum) update -yt";
+      "yumupcmd"    string => "$(paths.yum) update -y --skip-broken";
+      # "environments" slist => { "virtenv1", "virtenv2" };
+      "environments" slist => { "virtenv1" };
+      "virtdir"     string => "/opt";
+    redhat::
+      "redlst"       slist => { "epel-release",
+                                "wget" };
+    redhat_6::
+      "allnodeslst"  slist => { 
+                                "curl",
+                                # "haveged",
+                                "jq",
+                                # "libselinux-python",
+                                "lsof",
+                                "mailx",
+                                "man",
+                                "mc",
+                                "ntp",
+                                "openssh-server",
+                                "openssh-clients",
+                                "openssl",
+                                "postfix",
+                                "sudo",
+                                "tar",
+                                # "tcpdump",
+                                # "tzdata",
+                               };
+    macloud::
+      "ambarilst"  slist =>  {
+                                "ambari-agent",
+                                "ambari-server",
+                                "postgresql-jdbc",
+                                # "fuse-sshfs",
+                                # "krb5-workstation",
+                                # "rerun"
+                              };
+    cloudnode::
+      "nodelst"    slist =>  {
+                                "ambari-agent",
+                                "postgresql-jdbc",
+                                # "krb5-workstation",
+                                # "rerun"
+                              };
+    kdcs::
+    # krb5-* packages are installed through krb.cf because of DTV's repositories features  
+      "kdc_list"     slist => { 
+                                # "krb5-server",
+                                # "krb5-pkinit-openssl",
+                                "python-pip",
+                                "words"
+                              };
+    policy_server::
+      "hub_list"    slist => {
+                                "gnutls-utils",
+                                "rpm-build",
+                                "gnutls"
+                              };
+###
+  classes:
+    macloud::
+      # "incorrect_$(environments)" not => fileexists("$(virtdir)/$(environments)/bin/python");
+      "noreboot" expression => fileexists("$(vc.yum_pid)");
+###
+  packages:
+    # Install epel repository to all redhat like hosts
+    !reposok.!noreboot::
+      "${redlst}"
+      package_policy => "add",
+      package_method => yum;
+##
+   # Install packages from allnodeslst to all updated hosts
+    reposok.!noreboot::
+      "${allnodeslst}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      package_method => yum;
+##
+    # Install packages from ambarilst to the cloudera masters
+    # use policy "add" to avoid casual updating
+    macloud.reposok.!noreboot::
+      "${ambarilst}"
+      package_policy => "add",
+      # ifvarclass     => filesexist("@(cfrepos.repos)"),
+      classes        => if_repaired("macloud_softed"),
+      package_method => yum;
+##
+    # Install packages from nodelst to the nodes
+    # use policy "add" to avoid casual updating
+    cloudnode.reposok.!noreboot::
+      "${nodelst}"
+      package_policy => "add",
+      # ifvarclass     => filesexist("@(cfrepos.repos)"),
+      classes        => if_repaired("cloudnode_softed"),
+      package_method => yum;
+##
+    # Install packages from kdc_list to the kerberos servers
+    kdcs.reposok.!noreboot::
+      "${kdc_list}"
+      package_policy => "add",
+      # ifvarclass     => filesexist("@(cfrepos.repos)"),
+      classes        => if_repaired("kdcs_softed"),
+      package_method => yum;
+##
+    # Install packages from ldap_list to the kerberos servers
+    policy_server.reposok.!noreboot::
+      "${hub_list}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      package_method => yum;
+###
+  # commands:
+    # redhat.reposok.!noreboot::
+      # "$(softin.yumupcmd) &> $(sys.logdir)/yumup.log"
+      # # ifvarclass => and(filesexist("@(cfrepos.repos)"),not(fileexists("$(sys.logdir)/yumup.log"))),
+      # ifvarclass => and(filesexist("$(sys.logdir)/rmsoft.log"),not(fileexists("$(sys.logdir)/yumup.log"))),
+      # # ifvarclass => not(fileexists("$(sys.logdir)/yumup.log")),
+      # # action => if_elapsed("240");
+      # contain => in_shell;
+##
+    # linux.!noreboot.!osup::
+      # "$(softin.yumupcmd) && /sbin/reboot"
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      # contain => in_shell;
+##
+    # redhat.reposok.!noreboot::
+      # "$(paths.yum) -yt update openssl"
+      # ifvarclass => filesexist("@(cfrepos.repos)");
+##
+    # kdcs_softed::
+      # "$(paths.service) krb5kdc stop && $(paths.service) kadmin stop"
+      # contain => in_shell,
+      # comment => "Stop kerberos services for configuration";
+##
+    # macloud::
+      # "/usr/bin/virtualenv $(virtdir)/$(environments) --no-site-packages"
+      # contain => in_shell,
+      # ifvarclass => canonify("incorrect_$(environments)");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    kdcs_softed::
+      "$(sys.date) $(sys.uqhost) context \"kdcs_softed\" is defined by $(this.bundle)";
+    noreboot::
+      "$(sys.date) $(sys.uqhost) context \"noreboot\" is defined by $(this.bundle)";
+}

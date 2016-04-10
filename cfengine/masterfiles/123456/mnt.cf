@@ -1,0 +1,63 @@
+############################
+# /var/cfengine/masterfiles/123456/mnt.cf
+############################
+#
+# Mount /dev/sdb1 to /mnt in fstab
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "mnt" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent mnt
+{
+  vars:
+      # "devsdb"  string => "/dev/sdb1";
+      "point"    string => "/mnt";
+      # "devsdb"   string => execresult("$(paths.df) | $(paths.grep) \'/mnt$\' | $(paths.awk) \'{print $1}\'","useshell");
+      "devsdb"   string => execresult("$(paths.df) | $(paths.grep) \'$(mnt.point)$\' | $(paths.awk) \'{print $1}\'","useshell");
+      "sdbtype"  string => filestat("$(mnt.devsdb)", "type");
+###
+  methods:
+    !policy_server.linux.dtveng_net::
+      "sdbfstab" usebundle => mntsdb,
+      ifvarclass => strcmp("block device","$(mnt.sdbtype)"),
+      comment => "Add $(mnt.devsdb) to $(sys.fstab)";
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) device $(mnt.devsdb) is present"
+      ifvarclass => strcmp("block device","$(mnt.sdbtype)");
+
+}
+####
+bundle agent mntsdb
+{
+  vars:
+      "mntsdb1" string => "$(mnt.devsdb)               $(mnt.point)                    ext4    defaults        0 0";
+###
+  files:
+    !policy_server.linux.dtveng_net::
+      "$(sys.fstab)"
+      comment       => "Add $(mntsdb.mntsdb1) line to $(sys.fstab)",
+      create        => "false",
+      edit_line     => append_if_no_line($(mntsdb1)),
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("sort_fstab"),
+      edit_defaults => backup_timestamp;
+###
+  commands:
+    sort_fstab::
+      "$(paths.sort) -um $(sys.fstab) -o $(sys.fstab)"
+      handle  => "delete_duplicates_from_fstab",
+      classes => cmd_repair(0, "rmdups"),
+      comment => "Delete possible duplicates entries from fstab file";
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    sort_fstab::
+      "$(sys.date) $(sys.uqhost) block device  \"$(mnt.devsdb)\" is added to $(sys.fstab) to be mount on /mnt";
+    rmdups::
+      "$(sys.date) $(sys.uqhost) $(sys.fstab) is checked by \"sort -um\" command";
+}

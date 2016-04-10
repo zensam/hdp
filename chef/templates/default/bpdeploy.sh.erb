@@ -1,0 +1,54 @@
+#!/bin/bash
+
+LOG="/var/log/bpdeploy.log"
+AMBSERVER="server.devops.yaco-r.net"
+REQNUM=4
+ST=10
+
+ECHOCMD="$( which echo )"
+CURLCMD="$( which curl )"
+GREPCMD="$( which grep )"
+SLEEPCMD="$( which sleep )"
+
+APIURL="http://$AMBSERVER:8080/api/v1"
+USPW="admin:admin"
+HTAG="X-Requested-By:My-Company"
+
+# $ECHOCMD "[$(date +"%T")][Cluster Deployment] Starting cluster deployment" >> $LOG
+echo `date +%D\ %T\ ` "[Cluster Deployment] Starting cluster deployment" >> $LOG
+
+while true; do
+HOSTNUM="$( $CURLCMD -sS -u $USPW -X GET -i $APIURL/hosts | $GREPCMD -c 'host_name' )"
+# HOSTNUM="$( curl -sS -u $USPW -X GET -i $APIURL/hosts | grep -c 'host_name' )"
+if [[ $HOSTNUM -ge $REQNUM ]]; then
+     $ECHOCMD "[$(date +"%T")][Cluster Deployment] $HOSTNUM hosts are registered" >> $LOG
+#      echo "[$(date +"%T")][Cluster Deployment] $HOSTNUM hosts are registered" >> $LOG
+     # Register Blueprint with Ambari
+     $ECHOCMD "[$(date +"%T")][Cluster Deployment] REGISTERING BLUEPRINT" >> $LOG
+#      echo `date +%D\ %T\ ` "[Cluster Deployment] REGISTERING BLUEPRINT" >> $LOG
+     $CURLCMD -u $USPW -H "$HTAG" -X POST $APIURL/blueprints/AutoClusterbp?validate_topology=false -d @/tmp/bp.json >> $LOG
+#      curl -u $USPW -H "$HTAG" -X POST $APIURL/blueprints/AutoClusterbp?validate_topology=false -d @/tmp/bp.json >> $LOG
+     $SLEEPCMD $ST >> $LOG
+#      sleep $ST >> $LOG
+     # Create cluster
+     $ECHOCMD "[$(date +"%T")][Cluster Deployment] Mapping hosts to blueprint..." >> $LOG
+#      echo `date +%D\ %T\ ` "[Cluster Deployment] Mapping hosts to blueprint..." >> $LOG
+     $CURLCMD -u $USPW -H "$HTAG" -X POST $APIURL/clusters/AutoCluster1 -d @/tmp/map.json >> $LOG
+#      curl -u $USPW -H "$HTAG" -X POST $APIURL/clusters/AutoCluster1 -d @/tmp/map.json >> $LOG
+   break
+elif [ $HOSTNUM -lt $REQNUM ]; then
+     $ECHOCMD "[$(date +"%T")][WARNING] $HOSTNUM is less than $REQNUM, sleeping $ST seconds..." >> $LOG
+#      echo `date +%D\ %T\ ` "[WARNING] $HOSTNUM is less than $REQNUM, sleeping $ST seconds..." >> $LOG
+     $SLEEPCMD $ST >> $LOG
+#      sleep $ST >> $LOG
+  continue
+else
+      $ECHOCMD "[$(date +"%T")][ERROR] Check environment and settings ..." >> $LOG
+#       echo `date +%D\ %T\ ` "[ERROR] Check environment and settings ..." >> $LOG
+      exit
+fi
+break
+done
+
+$ECHOCMD `date +%D\ %T\ ` "[Cluster Deployment] FINISH" >> $LOG
+# echo `date +%D\ %T\ ` "[Cluster Deployment] FINISH" >> $LOG

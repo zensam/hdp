@@ -1,0 +1,58 @@
+curl http://vzach.de/data/lamba-blueprint.json -o lamba-blueprint.json
+ 
+curl --user admin:admin -H 'X-Requested-By:mycompany' -X POST http://192.168.0.101:8080/api/v1/blueprints/blueprint-c1 -d @lamba-blueprint.json
+ 
+curl http://vzach.de/data/lamda-hostmapping.json -o lamda-hostmapping.json
+ 
+curl --user admin:admin -H 'X-Requested-By:mycompany' -X POST http://192.168.0.101:8080/api/v1/clusters/c1 -d @lamda-hostmapping.json
+
+$(paths.curl) --upload-file $(cm_json) $(vc.uadpass) -o $(vc.cmdeplog) $(vc.apiurl)/v1.....
+
+// Edit /var/lib/pgsql/data/pg_hba.conf
+# vim /var/lib/pgsql/data/pg_hba.conf
+
+local  all  ambari,mapred,hive,oozie md5
+host  all   ambari,mapred,hive,oozie 0.0.0.0/0  md5
+host  all   ambari,mapred,hive,oozie ::/0 md5
+
+// Reload postgresql
+# service postgresql reload
+
+// Create hive db
+# su - postgres
+$ echo "CREATE DATABASE hivedb;" | psql -U postgres
+$ echo "CREATE USER hive WITH PASSWORD 'hive';" | psql -U postgres
+$ echo "GRANT ALL PRIVILEGES ON DATABASE hivedb TO hive;" | psql -U postgres
+
+// Create oozie db
+$ echo "CREATE DATABASE oozie;" | psql -U postgres
+$ echo "CREATE USER oozie WITH PASSWORD 'oozie';" | psql -U postgres
+$ echo "GRANT ALL PRIVILEGES ON DATABASE oozie TO oozie;" | psql -U postgres
+
+
+# /bin/echo -e "\ny\n3\n/usr/java/default\n" | /usr/sbin/ambari-server setup
+
+# /usr/sbin/ambari-server start
+
+Edit /var/lib/pgsql/data/pg_hba.conf
+# service postgresql reload
+
+# su - postgres -c 'psql -U $(ambari.pgusgrp) -f $(ambari.pgsqlscr) -o $(ambari.pgdbslog)'
+
+# ambari-server setup --jdbc-db=postgres --jdbc-driver=/usr/share/java/postgresql-jdbc.jar
+
+
+
+Install Oracle java
+
+# wget -O /tmp/jdk-8u66-linux-x64.rpm --no-check-certificate -c --header "Cookie: oraclelicense=accept-securebackup-cookie" http://download.oracle.com/otn-pub/java/jdk/8u66-b17/jdk-8u66-linux-x64.rpm
+
+# wget -O /tmp/jce_policy-8.zip --no-check-certificate --header "Cookie: oraclelicense=accept-securebackup-cookie" http://download.oracle.com/otn-pub/java/jce/8/jce_policy-8.zip
+
+
+
+Register Blueprint with Ambari
+$ curl -u admin:admin -X POST -H 'X-Requested-By:MyCompany' http://192.168.33.100:8080/api/v1/blueprints/AutoClusterbp?validate_topology=false -d @AutoCluster1_bp.json
+
+Create cluster
+$ curl -u admin:admin -X POST -H 'X-Requested-By:MyCompany' http://192.168.33.100:8080/api/v1/clusters/AutoCluster1 -d @AutoCluster1_map.json

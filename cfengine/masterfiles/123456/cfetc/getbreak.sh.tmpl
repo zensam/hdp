@@ -1,0 +1,7 @@
+#!/bin/bash
+# $(paths.wget) --no-check-certificate --tries=2 -q -c -P $(sys.workdir) https://s3-eu-west-1.amazonaws.com/<my-company_resource>/cd-cloudbreak.tar.gz
+$(paths.wget) -N -a $(cfhub.cflog)/getbreak.log --no-check-certificate --tries=1 -c -P $(cfhub.cfdist) $(vc.breakurl)$(vc.cloudarch)
+#https://$(vc.archdom)/$(vc.archdir)/$(vc.cloudarch)
+# $(paths.wget) -N -a $(cfhub.cflog)/getbreak.log --no-check-certificate --tries=1 -c -P $(cfhub.cfdist) \ 
+# https://$(vc.archdom)/$(vc.archdir)/$(vc.cloudarch)
+

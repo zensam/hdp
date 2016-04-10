@@ -1,0 +1,70 @@
+############################
+# /var/cfengine/masterfiles/123456/pw.cf
+############################
+#
+# Assign password for root and change cloudera manager admin default password
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "pw" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent pw
+{
+  methods:
+    # policy_server::
+    redhat|centos::
+      "usersmod" usebundle => users_mod;
+    # macloud::
+      # "cmadmin"  usebundle => cm_admin;
+
+}
+####
+bundle agent users_mod
+{
+  vars:
+      "phash"  string  => "$1$EXvHflqu$wPo5se9LKHWJhXVwgNN1P1";
+      # "phash"  string  => "$1$NNEYgqYb$bqAp8J6cd2mBOmBg1vvhd1";
+      "osusers" string => "root";
+      # "osusers" slist  => { "root", "centos" };
+###
+  commands:
+      "/usr/sbin/usermod -p $(phash) $(osusers)"
+      ifvarclass => userexists("$(osusers)"),
+      classes => if_repaired("phash_insed");
+###
+  reports:
+      # "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    # phash_insed::
+      # "$(sys.date) $(sys.uqhost) $(this.bundle) has inserted a new hash to $(osusers) shadow";
+}
+###
+# bundle agent cm_admin
+# {
+#   vars:
+#     macloud::
+#       "defadcreds" string => "-u admin:admin";
+#       "chpass" string => "$(paths.curl) $(vc.xput) $(vc.contype) $(defadcreds) -d \'{ \"password\": \"$(vc.adpass)\" }\' \'$(vc.apiurl)/v9/users/admin\'";
+#
+#   commands:
+#     macloud::
+#       "$(chpass)"
+#       classes  => if_repaired("chpassed"),
+#       ifvarclass => and(not(fileexists("$(sys.logdir)/scm-admin.log")),userexists("cloudera-scm"));
+#
+#   files:
+#     chpassed::
+#       "$(sys.logdir)/scm-admin.log"
+#       comment       => "Flag file to avoid cloudera manager admin password resetting",
+#       perms         => mog("444","root","root"),
+#       create        => "true",
+#       edit_defaults => no_backup,
+#       edit_line     => append_if_no_line("$(sys.date) - Cloudera Manager admin password has been changed by $(this.bundle)"),
+#       classes       => if_repaired("admin_password_changed");
+#
+#   reports:
+#     admin_password_changed::
+#        "$(sys.date) $(sys.uqhost) command \'$(chpass)\' has been invoked and file \"$(sys.logdir)/scm-admin.log has been created by $(this.bundle)";
+# }

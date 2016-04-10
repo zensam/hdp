@@ -1,0 +1,52 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+
+nodes = [
+  { :hostname => 'node3.devops.yaco-r.net', :ip => "192.168.33.103", :run_list => "role[agent]"  },
+  { :hostname => 'node1.devops.yaco-r.net', :ip => "192.168.33.101", :run_list => "role[agent]"  },
+  { :hostname => 'node2.devops.yaco-r.net', :ip => "192.168.33.102", :run_list => "role[agent]"  },
+  { :hostname => 'server.devops.yaco-r.net', :ip => "192.168.33.100", :run_list => "role[server]"  }
+  ]
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.require_version ">= 1.5.0"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.omnibus.chef_version = :latest
+  config.vm.box = "centos7.0"
+  config.vm.box_url = "https://github.com/holms/vagrant-centos7-box/releases/download/7.1.1503.001/CentOS-7.1.1503-x86_64-netboot.box"
+  config.berkshelf.enabled = true 
+
+  nodes.each do |node|
+    config.vm.define node[:hostname] do |node_config|
+
+    node_config.vm.hostname = "#{node[:hostname]}"
+    node_config.vm.network :private_network, ip: node[:ip]
+
+  config.vm.provider :virtualbox do |vb|
+#    vb.customize ["modifyvm", :id, "--memory", "8192"]
+     vb.memory = 8192
+     vb.cpus = 2
+  end
+
+  #if node[:hostname] == nodes.last[:hostname]
+    node_config.vm.provision :chef_zero do |chef|
+      chef.cookbooks_path = "/home/administrator/cd-hortonworks/Chef/"
+      chef.roles_path = "/home/administrator/cd-hortonworks/Chef/roles/"
+       chef.json = {
+         mysql: {
+          server_root_password: 'rootpass',
+          server_debian_password: 'debpass',
+          server_repl_password: 'replpass'
+        }
+      }
+    chef.run_list = "#{node[:run_list]}"
+#    end
+  end
+ end
+end
+end
+

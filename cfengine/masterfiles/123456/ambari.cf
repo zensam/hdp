@@ -1,0 +1,271 @@
+############################
+# /var/cfengine/masterfiles/123456/ambari.cf
+############################
+#
+# Ambari server and agent configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "ambari" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent ambari
+{
+  vars:
+    macloud|cloudnode::
+      "pghbacfg"  string => "/var/lib/pgsql/data/pg_hba.conf";
+      "jdbcjar"   string => "/usr/share/java/postgresql-jdbc.jar";
+      "servercfg" string => "$(vc.etc)/ambari-server/conf/ambari.properties";
+      "agentcfg"  string => "$(vc.etc)/ambari-agent/conf/ambari-agent.ini";
+      "servercmd" string => "/usr/sbin/ambari-server";
+      "agentcmd"  string => "/usr/sbin/ambari-agent";
+      "serverlog" string => "$(sys.logdir)/ambari_server_setup.log";
+      "servuplog" string => "$(sys.logdir)/ambari_server_upgrade.log";
+      "sstartlog" string => "$(sys.logdir)/ambari_server_start.log";
+      # "agentlog"  string => "$(sys.logdir)/ambari-agent-setup.log";
+      "pgusgrp"   string => "postgres";
+      "pghbacfg"  string => "/var/lib/pgsql/data/pg_hba.conf";
+      # "pghbacfg"  string => "/var/cfengine/state/pg/data/pg_hba.conf";
+      "pgsqlscr"  string => "$(sys.workdir)/pg_db_create.sql";
+      "pgdbslog"  string => "/tmp/pg_db_create.log";
+      # "pgdbslog"   string => "$(sys.logdir)/pg_db_create.log";
+###
+  methods:
+    redhat_6|centos_6::
+      "latestssl" usebundle => package_latest("openssl");
+##
+# /bin/echo -e "\ny\n3\n/usr/java/default\n" | /usr/sbin/ambari-server setup
+
+# /usr/sbin/ambari-server start
+
+# Edit /var/lib/pgsql/data/pg_hba.conf
+# service postgresql reload
+
+# su - postgres -c 'psql -U $(ambari.pgusgrp) -f $(ambari.pgsqlscr) -o $(ambari.pgdbslog)'
+
+# ambari-server setup --jdbc-db=postgres --jdbc-driver=/usr/share/java/postgresql-jdbc.jar
+##
+    macloud::
+      "ambariupgrade" usebundle => serupgrd,
+                     ifvarclass => and(not(fileexists("$(ambari.servuplog)")),fileexists("$(ambari.jdbcjar)")),
+                     # ifvarclass => fileexists("$(ambari.pgdbslog)"),
+                        comment => "Set jdbc-db and jdbc-driver";
+##
+    pgserver::
+      "pg_sql"        usebundle => pgsql,
+                     ifvarclass => and(not(fileexists("$(ambari.pgdbslog)")),fileexists("$(ambari.pghbacfg).cfsaved")),
+                        comment => "Create hive and oozie databases";
+##
+    pgserver::
+      "pg_hba"        usebundle => pghba,
+                     # ifvarclass => fileexists("$(ambari.sstartlog)"),
+                     ifvarclass => and(not(fileexists("$(ambari.pghbacfg).cfsaved")),fileexists("$(ambari.pghbacfg)")),
+                        comment => "Configure and reload postgresql server";
+##
+    macloud::
+      "ambari_start"  usebundle => serstart,
+                     ifvarclass => not(fileexists("$(ambari.sstartlog)")),
+                     # ifvarclass => fileexists("$(ambari.serverlog)"),
+                        comment => "Start ambari server";
+##
+    macloud::
+      "ambari_setup"  usebundle => sersetup,
+                     # ifvarclass => fileexists("$(ambari.servercfg)"),
+                     ifvarclass => and(not(fileexists("$(ambari.serverlog)")),fileexists("$(ambari.servercfg)")),
+                        comment => "Configure ambari server";
+##
+    (macloud|cloudnode).jdkok::
+      "ambari_agent"  usebundle => ambariag,
+                     ifvarclass => fileexists("$(ambari.agentcfg)"),
+                        comment => "Configure and start ambari agent";
+##
+#     macloud::
+#       "blue_print"    usebundle => bp,
+#                      ifvarclass => fileexists("$(ambari.pgdbslog)"),
+#                         comment => "Deploy Hortonworks cluster by blueprints";
+####
+}
+bundle agent serupgrd
+{
+  commands:
+      "$(ambari.servercmd) setup --jdbc-db=postgres --jdbc-driver=$(ambari.jdbcjar) &> $(ambari.servuplog)"
+      contain    => in_shell,
+      # ifvarclass => fileexists("$(ambari.jdbcjar)"),
+      ifvarclass => fileexists("$(ambari.pgdbslog)"),
+      # ifvarclass => and(fileexists("$(ambari.jdbcjar)"),not(fileexists("$(ambari.servuplog)"))),
+      classes    => if_else("servercfg_updated", "servercfg_up_failed");
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    servercfg_updated::
+      "$(sys.date) $(sys.uqhost) command \"ambari-server setup --jdbc-driver...\" was invoked by $(this.bundle) bundle";
+    servercfg_up_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: command \"ambari-server setup --jdbc-driver ...\" has failed";
+}
+####
+bundle agent pgsql
+{
+  files:
+      "$(ambari.pgsqlscr)"
+      # create        => "true",
+      # action      => if_elapsed("40"),
+      perms         => mog("440","$(ambari.pgusgrp)","$(ambari.pgusgrp)"),
+      ifvarclass    => and(userexists("$(ambari.pgusgrp)"),groupexists("$(ambari.pgusgrp)")),
+      edit_defaults => no_backup,
+      copy_from     => local_dcp("$(vc.cfetcdst)/pg_db_create.sql.txt"),
+      classes       => if_repaired("pgsql_edited"),
+      comment       => "Create sql script for hive, oozie and other databases creating";
+###
+  commands:
+    pgsql_edited::
+      "/usr/bin/psql -U $(ambari.pgusgrp) -f $(ambari.pgsqlscr) -o $(ambari.pgdbslog)"
+      # "/bin/su - $(ambari.pgusgrp) -c \'/usr/bin/psql -U $(ambari.pgusgrp) -f $(ambari.pgsqlscr) -o $(ambari.pgdbslog)\'"
+      contain => fordb,
+      # contain => in_shell,
+      classes => if_else("sqled", "sql_failed"),
+      comment => "Create databases for hive, oozie";
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    pgsql_edited::
+      "$(sys.date) $(sys.uqhost) $(ambari.pgsqlscr) has been created or edited by $(this.bundle) bundle";
+    sqled::
+      "$(sys.date) $(sys.uqhost) $(ambari.pgsqlscr) has been executed by $(this.bundle) bundle";
+    sql_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: execution of $(ambari.pgsqlscr) has failed in $(this.bundle) bundle";
+}
+####
+bundle agent pghba
+{
+  files:
+      "$(ambari.pghbacfg)"
+      create        => "false",
+      perms         => mog("600","$(ambari.pgusgrp)","$(ambari.pgusgrp)"),
+      # perms         => mog("600","root","root"),
+      edit_defaults => backup_timestamp, # MUST BE to create $(pg.hbacfg).cfsaved
+      copy_from     => local_dcp("$(vc.cfetcdst)/pg_hba.conf"),
+      # ifvarclass    => fileexists("$(ambari.pghbacfg)"),
+      ifvarclass    => fileexists("$(ambari.sstartlog)"),
+      classes       => if_repaired("pghba_edited"),
+      comment       => "Make sure pg_hba.conf contains desired configuration settings";
+###
+  commands:
+    pghba_edited::
+      "$(paths.service) postgresql reload"
+      contain => in_shell,
+      classes => if_else("pg_reloaded", "pg_failed"),
+      comment => "Apply new postgresql settings";
+###
+  # services:
+    # pghba_edited::
+      # "postgresql"
+      # service_policy => "reload",
+      # classes        => if_repaired("postgresql_restarted"),
+      # comment        => "Apply new postgresql settings";
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    pghba_edited::
+      "$(sys.date) $(sys.uqhost) $(ambari.pghbacfg) has been edited by $(this.bundle) bundle";
+    pg_reloaded::
+      "$(sys.date) $(sys.uqhost) reloading postgresql after $(ambari.pghbacfg) editing by $(this.bundle)";
+    pg_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: reloading postgresql after $(ambari.pghbacfg) editing has failed in $(this.bundle) bundle";
+}
+####
+bundle agent serstart
+{
+  commands:
+      "$(ambari.servercmd) start &> $(ambari.sstartlog)"
+      # action     => if_elapsed("20"),
+      contain    => in_shell,
+      # ifvarclass => not(fileexists("$(ambari.sstartlog)")),
+      ifvarclass => fileexists("$(ambari.serverlog)"),
+      classes    => if_else("server_started", "server__start_failed");
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    server_started::
+      "$(sys.date) $(sys.uqhost) command \"ambari-server start\" was invoked by $(this.bundle) bundle";
+    server__start_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: command \"ambari-server start\" has failed";
+}
+####
+bundle agent sersetup
+{
+  classes:
+      "amserok" expression => fileexists("$(ambari.servercmd)"); # ambari-server is installed
+###
+  commands:
+    amserok::
+      # "$(ambari.servercmd) setup -s &> $(ambari.serverlog)"
+      "$(paths.echo) -e \"\ny\n3\n$(vc.javahome)\n\" | $(ambari.servercmd) setup &> $(ambari.serverlog)"
+      contain    => foramb,
+      # contain    => in_shell,
+      # ifvarclass => not(fileexists("$(ambari.serverlog)")),
+      ifvarclass => fileexists("$(ambari.servercfg)"),
+      classes    => if_else("servercfg_setuped", "servercfg_failed");
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    amserok::
+      "$(sys.date) $(sys.uqhost) \"ambari-server\" is installed, checked by $(this.bundle) bundle";
+    !amserok::
+      "$(sys.date) $(sys.uqhost) WARNING: this is master host but \"ambari-server\" is NOT installed, checked by $(this.bundle) bundle";
+    servercfg_setuped::
+      "$(sys.date) $(sys.uqhost) command \"$(ambari.servercmd) setup -s\" was invoked by $(this.bundle) bundle";
+    servercfg_failed::
+      "$(sys.date) $(sys.uqhost) WARNING: command \"$(ambari.servercmd) setup -s ...\" has failed";
+}
+####
+bundle agent ambariag
+{
+   classes:
+      "amagok" expression => fileexists("$(ambari.agentcmd)"); # ambari-agent is installed
+###
+  files:
+    (cloudnode|macloud).amagok::
+      "$(ambari.agentcfg)"
+      perms         => mog("755","root","root"),
+      create        => "false",
+      edit_template => "$(vc.cfetcdst)/ambari-agent.ini.txt",
+      classes       => if_repaired("ambaricfg_edited");
+###
+  commands:
+    ambaricfg_edited::
+      "$(ambari.agentcmd) start"
+      contain => in_shell,
+      classes => cmd_repair(0, "agent_started"),
+      comment => "Start ambari agent if the configuration file was modified";
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) MARK: running $(this.bundle) bundle";
+    ambaricfg_edited::
+      "$(sys.date) $(sys.uqhost) file $(ambari.agentcfg) was edited by $(this.bundle) bundle";
+    agent_started::
+      "$(sys.date) $(sys.uqhost) command \"ambari-agent start\" was invoked by $(this.bundle) bundle";
+}
+####
+body contain fordb
+{
+    useshell => "useshell";
+    # umask => "0022";
+    exec_owner => "$(ambari.pgusgrp)";
+    exec_group => "$(ambari.pgusgrp)";
+    # exec_timeout => "5";
+    # chdir => "/dir/path";
+    # chroot => "/private/path";
+}
+####
+body contain foramb
+{
+    useshell => "useshell";
+    # umask => "0022";
+    exec_owner => "root";
+    exec_group => "root";
+    exec_timeout => "120";
+    chdir => "$(sys.logdir)";
+    # chroot => "/private/path";
+}

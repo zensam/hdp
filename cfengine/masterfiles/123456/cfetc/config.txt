@@ -1,0 +1,6 @@
+Host *
+  UserKnownHostsFile /dev/null
+  StrictHostKeyChecking no
+  #PasswordAuthentication yes
+  #IdentitiesOnly yes
+  #LogLevel=quiet

@@ -1,0 +1,11 @@
+{ "blueprint":"AutoClusterbp",
+  "default_password" : "admin",
+  "host_groups":[
+    { "name":"host_group_1",
+      "hosts":[ { "fqdn":"server.devops.internal" } ] },
+    { "name":"host_group_2",
+      "hosts":[ { "fqdn":"node1.devops.internal" } ] },
+    { "name":"host_group_3",
+      "hosts":[ { "fqdn":"node2.devops.internal" } ] },
+    { "name":"host_group_4",
+      "hosts":[ { "fqdn":"node3.devops.internal" } ] } ] }
